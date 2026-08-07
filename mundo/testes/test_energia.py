@@ -52,3 +52,33 @@ def test_central_desconhecida_lanca_erro():
     gerenciador = _criar_gerenciador()
     with pytest.raises(CentralDesconhecidaError):
         gerenciador.consultar_energia("inexistente")
+
+
+def test_debitar_com_quantidade_negativa_lanca_erro():
+    gerenciador = _criar_gerenciador()
+    with pytest.raises(ValueError):
+        gerenciador.debitar("extracao", -10)
+
+
+def test_revogar_com_quantidade_negativa_lanca_erro():
+    gerenciador = _criar_gerenciador()
+    with pytest.raises(ValueError):
+        gerenciador.revogar_energia("extracao", -5)
+
+
+def test_alocar_com_quantidade_negativa_lanca_erro():
+    gerenciador = _criar_gerenciador()
+    with pytest.raises(ValueError):
+        gerenciador.alocar_energia(GerenciadorDeEnergia.RESERVA, "extracao", -10)
+
+
+def test_redistribuir_com_quantidade_negativa_lanca_erro():
+    gerenciador = _criar_gerenciador()
+    with pytest.raises(ValueError):
+        gerenciador.redistribuir_energia("extracao", "transporte", -5)
+
+
+def test_debitar_com_quantidade_zero_lanca_erro():
+    gerenciador = _criar_gerenciador()
+    with pytest.raises(ValueError):
+        gerenciador.debitar("extracao", 0)

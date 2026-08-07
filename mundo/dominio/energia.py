@@ -27,14 +27,17 @@ class GerenciadorDeEnergia:
         return self._saldos[central]
 
     def alocar_energia(self, origem: str, destino: str, quantidade: int) -> None:
+        self._validar_quantidade(quantidade)
         if origem != self.RESERVA:
             raise PermissionError("Somente a Central de Missão pode alocar a partir da reserva")
         self._transferir(origem, destino, quantidade)
 
     def redistribuir_energia(self, origem: str, destino: str, quantidade: int) -> None:
+        self._validar_quantidade(quantidade)
         self._transferir(origem, destino, quantidade)
 
     def revogar_energia(self, central: str, quantidade: int) -> None:
+        self._validar_quantidade(quantidade)
         self._validar_central(central)
         if self._saldos[central] < quantidade:
             raise EnergiaInsuficienteError(central)
@@ -42,6 +45,7 @@ class GerenciadorDeEnergia:
         self._saldos[self.RESERVA] += quantidade
 
     def debitar(self, central: str, quantidade: int) -> None:
+        self._validar_quantidade(quantidade)
         self._validar_central(central)
         if self._saldos[central] < quantidade:
             raise EnergiaInsuficienteError(central)
@@ -58,3 +62,7 @@ class GerenciadorDeEnergia:
     def _validar_central(self, central: str) -> None:
         if central not in self._saldos:
             raise CentralDesconhecidaError(central)
+
+    def _validar_quantidade(self, quantidade: int) -> None:
+        if quantidade <= 0:
+            raise ValueError("Quantidade deve ser positiva")
