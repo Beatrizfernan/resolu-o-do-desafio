@@ -1,0 +1,57 @@
+[
+  {
+    "nome": "hematita",
+    "valor_por_unidade": 5.0,
+    "raridade": 0.1,
+    "custo_extracao": 1.0,
+    "massa": 1.0,
+    "taxa_degradacao": 0.2,
+    "sensibilidade_temperatura": 0.1,
+    "sensibilidade_transporte": 0.1,
+    "sensibilidade_armazenagem": 0.1
+  },
+  {
+    "nome": "silica_de_alta_pureza",
+    "valor_por_unidade": 20.0,
+    "raridade": 0.3,
+    "custo_extracao": 2.0,
+    "massa": 0.8,
+    "taxa_degradacao": 0.4,
+    "sensibilidade_temperatura": 0.3,
+    "sensibilidade_transporte": 0.3,
+    "sensibilidade_armazenagem": 0.3
+  },
+  {
+    "nome": "jarosita",
+    "valor_por_unidade": 35.0,
+    "raridade": 0.6,
+    "custo_extracao": 3.5,
+    "massa": 1.2,
+    "taxa_degradacao": 0.7,
+    "sensibilidade_temperatura": 0.6,
+    "sensibilidade_transporte": 0.6,
+    "sensibilidade_armazenagem": 0.6
+  },
+  {
+    "nome": "gelo_de_agua",
+    "valor_por_unidade": 40.0,
+    "raridade": 0.5,
+    "custo_extracao": 2.5,
+    "massa": 0.9,
+    "taxa_degradacao": 0.9,
+    "sensibilidade_temperatura": 0.9,
+    "sensibilidade_transporte": 0.5,
+    "sensibilidade_armazenagem": 0.7
+  },
+  {
+    "nome": "cristal_marciano_raro",
+    "valor_por_unidade": 200.0,
+    "raridade": 0.95,
+    "custo_extracao": 8.0,
+    "massa": 0.3,
+    "taxa_degradacao": 0.3,
+    "sensibilidade_temperatura": 0.4,
+    "sensibilidade_transporte": 0.4,
+    "sensibilidade_armazenagem": 0.4
+  }
+]
