@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
@@ -62,10 +63,11 @@ def test_extracao_concluida_cria_carga_que_ja_degrada_no_ciclo_de_criacao():
         carga = next(iter(motor.cargas.values()))
         assert carga.mineral == jazida["mineral"]
         assert carga.quantidade == 10.0
-        # A carga nasce com qualidade máxima e sofre a degradação do ciclo em que foi criada.
+        # A carga nasce com a qualidade inicial do modo (NORMAL por omissão: 92.0)
+        # e sofre a degradação do ciclo em que foi criada.
         # Hematita em jazida: taxa 0.2 × sensibilidade 1.0 × mult. do local 2.0 = 0.4 por ciclo.
         assert carga.local == LocalDaCarga.EM_JAZIDA
-        assert carga.qualidade == 99.6
+        assert carga.qualidade == 91.6
 
 
 def test_interromper_extracao_muda_estado_para_retornando():
@@ -117,3 +119,89 @@ def test_inspecionar_jazida_inexistente_retorna_404():
     with TestClient(app) as cliente:
         resposta = cliente.get("/extracao/jazidas/inexistente")
         assert resposta.status_code == 404
+
+
+def _extrair(cliente, **campos):
+    corpo = {
+        "identificador_da_unidade": "mineradora-1",
+        "identificador_da_jazida": "jazida-1",
+        "quantidade": 10.0,
+    }
+    corpo.update(campos)
+    return cliente.post("/extracao/iniciar-extracao", json=corpo)
+
+
+def test_modo_agressivo_desperdica_mais_da_jazida_que_o_cuidadoso():
+    from mundo.api.dependencias import instancia_do_mundo
+
+    for modo, esperado_consumido in (("cuidadoso", 10.0), ("agressivo", 14.0)):
+        app = criar_app(com_loop_real_time=False)
+        with TestClient(app) as cliente:
+            motor = instancia_do_mundo.obter_motor()
+            motor.energia.alocar_energia("reserva_estrategica", "extracao", 100)
+            restante_antes = motor.jazidas["jazida-1"].quantidade_disponivel
+
+            _extrair(cliente, modo=modo)
+            motor.avancar_ciclo(10)
+
+            consumido = restante_antes - motor.jazidas["jazida-1"].quantidade_disponivel
+            assert consumido == esperado_consumido
+
+
+def test_modo_define_a_qualidade_inicial_da_carga():
+    from mundo.api.dependencias import instancia_do_mundo
+
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 100)
+
+        _extrair(cliente, modo="agressivo")
+        # Agressivo dura round(5 × 0.6) = 3 ciclos, contados a partir do ciclo 1
+        # em que o comando é executado.
+        motor.avancar_ciclo(4)
+        carga = next(iter(motor.cargas.values()))
+
+        # Qualidade inicial do modo agressivo (78.0) menos a degradação de 0.4
+        # do ciclo em que a carga foi criada.
+        assert carga.qualidade == 77.6
+        assert carga.local.value == "em_jazida"
+
+
+def test_modo_agressivo_conclui_antes_do_cuidadoso():
+    from mundo.api.dependencias import instancia_do_mundo
+
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 100)
+
+        _extrair(cliente, identificador_da_unidade="mineradora-1", modo="agressivo")
+        _extrair(cliente, identificador_da_unidade="mineradora-2", modo="cuidadoso")
+        motor.avancar_ciclo(4)
+
+        assert motor.robos["mineradora-1"].estado.value == "aguardando"
+        assert motor.robos["mineradora-2"].estado.value == "executando"
+
+
+def test_custo_energetico_deriva_do_mineral_e_do_modo():
+    from mundo.api.dependencias import instancia_do_mundo
+
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 100)
+        mineral = motor.catalogo_de_minerais.obter(motor.jazidas["jazida-1"].mineral)
+        antes = motor.energia.consultar_energia("extracao")
+
+        _extrair(cliente, modo="normal")
+        motor.avancar_ciclo(1)
+
+        esperado = mineral.custo_extracao * 10.0 * 0.2 * 1.0
+        assert antes - motor.energia.consultar_energia("extracao") == pytest.approx(esperado)
+
+
+def test_modo_invalido_retorna_422():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        assert _extrair(cliente, modo="turbo").status_code == 422

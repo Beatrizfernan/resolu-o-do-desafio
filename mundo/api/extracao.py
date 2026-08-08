@@ -3,8 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from mundo.dominio.cargas import CargaMineral
+from mundo.dominio.cargas import CargaMineral, LocalDaCarga
 from mundo.dominio.jazidas import EstadoDaJazida
+from mundo.dominio.modos import ModoDeExtracao
 from mundo.dominio.robos import EstadoDoRobo
 from mundo.motor.comandos import Comando
 
@@ -13,8 +14,6 @@ from .dependencias import obter_motor
 router = APIRouter(prefix="/extracao", tags=["extracao"])
 CENTRAL = "extracao"
 DURACAO_EXTRACAO_EM_CICLOS = 5
-CUSTO_ENERGETICO_EXTRACAO = 2
-QUALIDADE_INICIAL_DA_CARGA = 100.0
 
 
 @router.get("/jazidas")
@@ -52,6 +51,7 @@ class RequisicaoDeExtracao(BaseModel):
     identificador_da_unidade: str
     identificador_da_jazida: str
     quantidade: float
+    modo: ModoDeExtracao = ModoDeExtracao.NORMAL
 
 
 @router.post("/iniciar-extracao")
@@ -67,18 +67,29 @@ async def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
             raise ValueError("Unidade indisponível")
         if jazida.estado != EstadoDaJazida.DISPONIVEL:
             raise ValueError("Jazida não disponível")
-        motor.energia.debitar(CENTRAL, CUSTO_ENERGETICO_EXTRACAO)
+        perfil = motor.catalogo_de_modos.obter_extracao(requisicao.modo)
+        mineral = motor.catalogo_de_minerais.obter(jazida.mineral)
+        custo = (
+            mineral.custo_extracao
+            * requisicao.quantidade
+            * motor.catalogo_de_modos.fator_base_de_energia
+            * perfil.mult_energia
+        )
+        motor.energia.debitar(CENTRAL, custo)
         unidade.estado = EstadoDoRobo.EXECUTANDO
-        ciclo_conclusao = motor.ciclo_atual + DURACAO_EXTRACAO_EM_CICLOS
+        duracao = max(1, round(DURACAO_EXTRACAO_EM_CICLOS * perfil.mult_duracao))
+        ciclo_conclusao = motor.ciclo_atual + duracao
 
         def concluir() -> None:
-            jazida.extrair(requisicao.quantidade)
+            consumido = requisicao.quantidade * perfil.fator_desperdicio
+            jazida.extrair(consumido)
             unidade.estado = EstadoDoRobo.AGUARDANDO
             carga = CargaMineral(
                 f"carga-{jazida.identificador}-{unidade.identificador}-{motor.ciclo_atual}",
                 jazida.mineral,
                 requisicao.quantidade,
-                QUALIDADE_INICIAL_DA_CARGA,
+                perfil.qualidade_inicial,
+                local=LocalDaCarga.EM_JAZIDA,
             )
             motor.cargas[carga.identificador] = carga
             motor.eventos.publicar(
@@ -88,6 +99,8 @@ async def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
                     "unidade": unidade.identificador,
                     "jazida": jazida.identificador,
                     "quantidade": requisicao.quantidade,
+                    "quantidade_consumida_da_jazida": consumido,
+                    "modo": requisicao.modo.value,
                     "carga": carga.identificador,
                 },
             )
