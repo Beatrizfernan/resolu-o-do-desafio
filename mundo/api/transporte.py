@@ -15,7 +15,7 @@ CUSTO_ENERGETICO_VIAGEM = 3
 
 
 @router.get("/rotas")
-def consultar_rotas() -> list[dict]:
+async def consultar_rotas() -> list[dict]:
     motor = obter_motor()
     return [
         {
@@ -30,7 +30,7 @@ def consultar_rotas() -> list[dict]:
 
 
 @router.get("/transportadores")
-def consultar_transportadores() -> list[dict]:
+async def consultar_transportadores() -> list[dict]:
     motor = obter_motor()
     return [
         {
@@ -44,7 +44,7 @@ def consultar_transportadores() -> list[dict]:
 
 
 @router.get("/cargas-disponiveis")
-def consultar_cargas_disponiveis() -> list[dict]:
+async def consultar_cargas_disponiveis() -> list[dict]:
     motor = obter_motor()
     return [
         {
@@ -58,7 +58,7 @@ def consultar_cargas_disponiveis() -> list[dict]:
 
 
 @router.get("/planejar-transporte")
-def planejar_transporte(identificador_da_carga: str) -> dict:
+async def planejar_transporte(identificador_da_carga: str) -> dict:
     motor = obter_motor()
     carga = motor.cargas.get(identificador_da_carga)
     if carga is None:
@@ -75,7 +75,7 @@ class RequisicaoDeCarregamento(BaseModel):
 
 
 @router.post("/carregar")
-def carregar(requisicao: RequisicaoDeCarregamento) -> dict:
+async def carregar(requisicao: RequisicaoDeCarregamento) -> dict:
     motor = obter_motor()
     unidade = motor.robos.get(requisicao.identificador_da_unidade)
     if unidade is None:
@@ -101,7 +101,7 @@ class RequisicaoDeViagem(BaseModel):
 
 
 @router.post("/iniciar-viagem")
-def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
+async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
     motor = obter_motor()
     unidade = motor.robos.get(requisicao.identificador_da_unidade)
     rota = motor.rotas.get(requisicao.identificador_da_rota)
@@ -140,7 +140,7 @@ class RequisicaoDeUnidade(BaseModel):
 
 
 @router.post("/abortar-viagem")
-def abortar_viagem(requisicao: RequisicaoDeUnidade) -> dict:
+async def abortar_viagem(requisicao: RequisicaoDeUnidade) -> dict:
     motor = obter_motor()
     unidade = motor.robos.get(requisicao.identificador_da_unidade)
     if unidade is None:
@@ -154,7 +154,7 @@ def abortar_viagem(requisicao: RequisicaoDeUnidade) -> dict:
 
 
 @router.post("/descarregar")
-def descarregar(requisicao: RequisicaoDeCarregamento) -> dict:
+async def descarregar(requisicao: RequisicaoDeCarregamento) -> dict:
     motor = obter_motor()
 
     def executar() -> None:
@@ -167,7 +167,7 @@ def descarregar(requisicao: RequisicaoDeCarregamento) -> dict:
 
 
 @router.post("/retornar-unidade")
-def retornar_unidade(requisicao: RequisicaoDeUnidade) -> dict:
+async def retornar_unidade(requisicao: RequisicaoDeUnidade) -> dict:
     motor = obter_motor()
     unidade = motor.robos.get(requisicao.identificador_da_unidade)
     if unidade is None:

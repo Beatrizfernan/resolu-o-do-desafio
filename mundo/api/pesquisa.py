@@ -15,7 +15,7 @@ LIMIAR_QUALIDADE_APROVACAO = 40.0
 
 
 @router.get("/fila")
-def consultar_fila() -> list[str]:
+async def consultar_fila() -> list[str]:
     motor = obter_motor()
     return list(motor.fila_de_pesquisa)
 
@@ -25,7 +25,7 @@ class RequisicaoDeAnalise(BaseModel):
 
 
 @router.post("/iniciar-analise")
-def iniciar_analise(requisicao: RequisicaoDeAnalise) -> dict:
+async def iniciar_analise(requisicao: RequisicaoDeAnalise) -> dict:
     motor = obter_motor()
     if requisicao.identificador_da_carga not in motor.cargas:
         raise HTTPException(status_code=404, detail="Carga não encontrada")
@@ -47,7 +47,7 @@ def iniciar_analise(requisicao: RequisicaoDeAnalise) -> dict:
 
 
 @router.post("/classificar-carga")
-def classificar_carga(requisicao: RequisicaoDeAnalise) -> dict:
+async def classificar_carga(requisicao: RequisicaoDeAnalise) -> dict:
     motor = obter_motor()
     carga = motor.cargas.get(requisicao.identificador_da_carga)
     if carga is None:
@@ -56,7 +56,7 @@ def classificar_carga(requisicao: RequisicaoDeAnalise) -> dict:
 
 
 @router.post("/aprovar-carga")
-def aprovar_carga(requisicao: RequisicaoDeAnalise) -> dict:
+async def aprovar_carga(requisicao: RequisicaoDeAnalise) -> dict:
     motor = obter_motor()
 
     def executar() -> None:
@@ -72,7 +72,7 @@ def aprovar_carga(requisicao: RequisicaoDeAnalise) -> dict:
 
 
 @router.post("/rejeitar-carga")
-def rejeitar_carga(requisicao: RequisicaoDeAnalise) -> dict:
+async def rejeitar_carga(requisicao: RequisicaoDeAnalise) -> dict:
     motor = obter_motor()
 
     def executar() -> None:
@@ -92,7 +92,7 @@ class RequisicaoDeDistribuicao(BaseModel):
 
 
 @router.post("/preparar-distribuicao")
-def preparar_distribuicao(requisicao: RequisicaoDeDistribuicao) -> dict:
+async def preparar_distribuicao(requisicao: RequisicaoDeDistribuicao) -> dict:
     motor = obter_motor()
 
     def executar() -> None:

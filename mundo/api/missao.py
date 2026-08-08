@@ -22,7 +22,7 @@ class RequisicaoDeResetarMundo(BaseModel):
 
 
 @router.post("/resetar-mundo")
-def resetar_mundo(requisicao: RequisicaoDeResetarMundo) -> dict:
+async def resetar_mundo(requisicao: RequisicaoDeResetarMundo) -> dict:
     catalogo = CatalogoDeMinerais.carregar_de_arquivo(CAMINHO_CATALOGO)
     instancia_do_mundo.inicializar(
         ConfiguracaoDaSimulacao(semente=requisicao.semente, duracao_maxima=requisicao.duracao_maxima),
@@ -32,7 +32,7 @@ def resetar_mundo(requisicao: RequisicaoDeResetarMundo) -> dict:
 
 
 @router.get("/estado")
-def consultar_estado_global() -> dict:
+async def consultar_estado_global() -> dict:
     motor = obter_motor()
     centrais = ["extracao", "armazenagem", "transporte", "pesquisa", "missao", GerenciadorDeEnergia.RESERVA]
     return {
@@ -43,7 +43,7 @@ def consultar_estado_global() -> dict:
 
 
 @router.get("/eventos")
-def consultar_eventos(desde_ciclo: int = 0) -> list[dict]:
+async def consultar_eventos(desde_ciclo: int = 0) -> list[dict]:
     motor = obter_motor()
     return [
         {"identificador": e.identificador, "tipo": e.tipo, "ciclo": e.ciclo, "dados": e.dados}
@@ -57,7 +57,7 @@ class RequisicaoDeAlocacao(BaseModel):
 
 
 @router.post("/alocar-energia")
-def alocar_energia(requisicao: RequisicaoDeAlocacao) -> dict:
+async def alocar_energia(requisicao: RequisicaoDeAlocacao) -> dict:
     motor = obter_motor()
     try:
         motor.energia.alocar_energia(GerenciadorDeEnergia.RESERVA, requisicao.destino, requisicao.quantidade)
@@ -72,7 +72,7 @@ class RequisicaoDeAutorizacao(BaseModel):
 
 
 @router.post("/autorizar-missao")
-def autorizar_missao(requisicao: RequisicaoDeAutorizacao) -> dict:
+async def autorizar_missao(requisicao: RequisicaoDeAutorizacao) -> dict:
     motor = obter_motor()
     autorizacao = motor.autorizacoes.emitir(requisicao.operacao, requisicao.central_solicitante)
     return {"id_autorizacao": autorizacao.identificador}
@@ -83,7 +83,7 @@ class RequisicaoDeWebhook(BaseModel):
 
 
 @router.post("/registrar-webhook")
-def registrar_webhook(requisicao: RequisicaoDeWebhook) -> dict:
+async def registrar_webhook(requisicao: RequisicaoDeWebhook) -> dict:
     motor = obter_motor()
     if not hasattr(motor, "_dispatcher_de_webhooks"):
         motor._dispatcher_de_webhooks = DispatcherDeWebhooks()

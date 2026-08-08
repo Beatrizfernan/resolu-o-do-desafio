@@ -14,7 +14,7 @@ LIMIAR_PROXIMO_DA_CAPACIDADE = 0.9
 
 
 @router.get("/armazens")
-def consultar_armazens() -> list[dict]:
+async def consultar_armazens() -> list[dict]:
     motor = obter_motor()
     return [
         {
@@ -34,7 +34,7 @@ class RequisicaoDeReserva(BaseModel):
 
 
 @router.post("/reservar-espaco")
-def reservar_espaco(requisicao: RequisicaoDeReserva) -> dict:
+async def reservar_espaco(requisicao: RequisicaoDeReserva) -> dict:
     motor = obter_motor()
     armazem = motor.armazens.get(requisicao.identificador_do_armazem)
     if armazem is None:
@@ -54,7 +54,7 @@ class RequisicaoDeRecebimento(BaseModel):
 
 
 @router.post("/receber-carga")
-def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
+async def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
     motor = obter_motor()
     armazem = motor.armazens.get(requisicao.identificador_do_armazem)
     if armazem is None:
@@ -93,7 +93,7 @@ class RequisicaoDeRealocacao(BaseModel):
 
 
 @router.post("/realocar-carga")
-def realocar_carga(requisicao: RequisicaoDeRealocacao) -> dict:
+async def realocar_carga(requisicao: RequisicaoDeRealocacao) -> dict:
     motor = obter_motor()
 
     def executar() -> None:
@@ -113,7 +113,7 @@ class RequisicaoDeLiberacao(BaseModel):
 
 
 @router.post("/liberar-carga")
-def liberar_carga(requisicao: RequisicaoDeLiberacao) -> dict:
+async def liberar_carga(requisicao: RequisicaoDeLiberacao) -> dict:
     motor = obter_motor()
 
     def executar() -> None:
@@ -129,7 +129,7 @@ class RequisicaoDeDescarte(BaseModel):
 
 
 @router.post("/descartar-carga")
-def descartar_carga(requisicao: RequisicaoDeDescarte) -> dict:
+async def descartar_carga(requisicao: RequisicaoDeDescarte) -> dict:
     motor = obter_motor()
 
     def executar() -> None:
@@ -147,7 +147,7 @@ class RequisicaoDeSolicitacaoDeTransporte(BaseModel):
 
 
 @router.post("/solicitar-transporte")
-def solicitar_transporte(requisicao: RequisicaoDeSolicitacaoDeTransporte) -> dict:
+async def solicitar_transporte(requisicao: RequisicaoDeSolicitacaoDeTransporte) -> dict:
     motor = obter_motor()
 
     def executar() -> None:

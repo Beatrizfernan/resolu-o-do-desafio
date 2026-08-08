@@ -18,7 +18,7 @@ QUALIDADE_INICIAL_DA_CARGA = 100.0
 
 
 @router.get("/jazidas")
-def consultar_jazidas() -> list[dict]:
+async def consultar_jazidas() -> list[dict]:
     motor = obter_motor()
     return [
         {
@@ -32,7 +32,7 @@ def consultar_jazidas() -> list[dict]:
 
 
 @router.get("/jazidas/{identificador}")
-def inspecionar_jazida(identificador: str) -> dict:
+async def inspecionar_jazida(identificador: str) -> dict:
     motor = obter_motor()
     jazida = motor.jazidas.get(identificador)
     if jazida is None:
@@ -55,7 +55,7 @@ class RequisicaoDeExtracao(BaseModel):
 
 
 @router.post("/iniciar-extracao")
-def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
+async def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
     motor = obter_motor()
     unidade = motor.robos.get(requisicao.identificador_da_unidade)
     jazida = motor.jazidas.get(requisicao.identificador_da_jazida)
@@ -103,7 +103,7 @@ class RequisicaoDeUnidade(BaseModel):
 
 
 @router.post("/interromper-extracao")
-def interromper_extracao(requisicao: RequisicaoDeUnidade) -> dict:
+async def interromper_extracao(requisicao: RequisicaoDeUnidade) -> dict:
     motor = obter_motor()
     unidade = motor.robos.get(requisicao.identificador_da_unidade)
     if unidade is None:
@@ -117,7 +117,7 @@ def interromper_extracao(requisicao: RequisicaoDeUnidade) -> dict:
 
 
 @router.post("/retornar-unidade")
-def retornar_unidade(requisicao: RequisicaoDeUnidade) -> dict:
+async def retornar_unidade(requisicao: RequisicaoDeUnidade) -> dict:
     motor = obter_motor()
     unidade = motor.robos.get(requisicao.identificador_da_unidade)
     if unidade is None:
