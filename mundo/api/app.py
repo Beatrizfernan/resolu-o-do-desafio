@@ -1,0 +1,42 @@
+from __future__ import annotations
+
+import asyncio
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI
+
+from mundo.dominio.minerais import CatalogoDeMinerais
+from mundo.motor.motor_de_simulacao import ConfiguracaoDaSimulacao
+
+from .dependencias import instancia_do_mundo
+
+INTERVALO_DE_CICLO_SEGUNDOS = 1.0
+CAMINHO_CATALOGO_PADRAO = Path(__file__).parent.parent / "config" / "minerais.json"
+
+
+async def _loop_real_time() -> None:
+    while True:
+        await asyncio.sleep(INTERVALO_DE_CICLO_SEGUNDOS)
+        if instancia_do_mundo.motor is not None:
+            instancia_do_mundo.motor.avancar_ciclo()
+
+
+@asynccontextmanager
+async def ciclo_de_vida(app: FastAPI):
+    catalogo = CatalogoDeMinerais.carregar_de_arquivo(CAMINHO_CATALOGO_PADRAO)
+    instancia_do_mundo.inicializar(ConfiguracaoDaSimulacao(semente=0, duracao_maxima=5000), catalogo)
+    tarefa = asyncio.create_task(_loop_real_time())
+    yield
+    tarefa.cancel()
+
+
+def criar_app() -> FastAPI:
+    from . import missao
+
+    app = FastAPI(title="Mundo — Operação Marciana", lifespan=ciclo_de_vida)
+    app.include_router(missao.router)
+    return app
+
+
+app = criar_app()
