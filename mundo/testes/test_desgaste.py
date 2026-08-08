@@ -229,7 +229,13 @@ def test_desgaste_da_viagem_escala_com_o_ritmo_do_modo():
     )
 
 
-CICLOS_DE_OPERACAO_CONTINUA = 60
+# Janela do teste de inversão. Era 60, calibrada quando a entrega era creditada
+# pelo HTTP 200 do pedido — o que inflava os modos lentos na fronteira e fazia a
+# inversão parecer acontecer antes do que acontece. Com a entrega creditada pelo
+# evento `extracao_concluida`, a inversão começa em 70 ciclos e a margem cresce
+# de forma monotônica: +11.5% em 70, +38.8% em 80, +61.1% em 120, +120% em 160.
+# 120 fica bem depois da virada e longe da faixa onde o líder ainda oscila.
+CICLOS_DE_OPERACAO_CONTINUA = 120
 
 
 def _simular_operacao_continua(
@@ -243,6 +249,13 @@ def _simular_operacao_continua(
     Devolve, por janela, (unidades entregues, energia gasta), ponderando a
     entrega pela qualidade inicial do modo: o que interessa é valor útil, não
     massa bruta.
+
+    A entrega é creditada pelo evento `extracao_concluida`, não pelo HTTP 200
+    do pedido. A diferença importa na fronteira da janela: uma extração
+    despachada e ainda em voo já teve o 200, mas não produziu minério nenhum.
+    Como os modos têm durações diferentes, contar pedidos infla sempre os modos
+    lentos — na janela 40, `cuidadoso` fazia 5 pedidos para 4 conclusões (25%)
+    contra 8 para 8 do `agressivo` (0%) — e chegava a inverter o líder.
     """
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
@@ -251,17 +264,22 @@ def _simular_operacao_continua(
         unidade = motor.robos["mineradora-1"]
         perfil = motor.catalogo_de_modos.obter_extracao(ModoDeExtracao(modo))
         energia_antes = motor.energia.consultar_energia("extracao")
-        entregue = 0.0
+        concluidas = [0]
         fotos: dict[int, tuple[float, float]] = {}
+
+        def ao_evento(evento) -> None:
+            if evento.tipo == "extracao_concluida":
+                concluidas[0] += 1
+
+        motor.eventos.assinar(ao_evento)
 
         for ciclo in range(1, max(janelas) + 1):
             if unidade.estado.value == "disponivel":
-                resposta = _extrair(cliente, modo=modo, quantidade=2.0)
-                if resposta.status_code == 200:
-                    entregue += 2.0 * (perfil.qualidade_inicial / 100)
+                _extrair(cliente, modo=modo, quantidade=2.0)
             elif unidade.estado.value == "aguardando":
                 unidade.estado = EstadoDoRobo.DISPONIVEL
             motor.avancar_ciclo(1)
+            entregue = concluidas[0] * 2.0 * (perfil.qualidade_inicial / 100)
             if ciclo in janelas:
                 gasto = energia_antes - motor.energia.consultar_energia("extracao")
                 fotos[ciclo] = (entregue, gasto)
@@ -299,11 +317,23 @@ def test_agressivo_deixa_de_dominar_sob_operacao_continua():
 # definição de "mais conservador": índice menor, ritmo menor.
 MODOS_DO_MAIS_CONSERVADOR_AO_MAIS_INTENSO = ("cuidadoso", "normal", "agressivo")
 
-# Janelas de operação contínua, em ciclos. Cobrem os dois lados da virada
-# observada por volta de 70 ciclos: 40 e 60 ficam antes dela, 80 e 120 depois.
-# Só um par de janelas não distinguiria uma troca de liderança real de um
-# empate ruidoso; quatro mostram a tendência sustentada dos dois lados.
-JANELAS_DE_OPERACAO_CONTINUA = (40, 60, 80, 120)
+# Janelas de operação contínua, em ciclos.
+#
+# A escolha é deliberada e já errou uma vez: uma versão anterior usava
+# (40, 60, 80, 120) e afirmava que `agressivo` nunca lidera. Uma varredura de 5
+# em 5 mostrou que `agressivo` é o mais barato em toda janela ≤ 30 — a
+# afirmação só se sustentava porque as quatro janelas caíam depois da virada,
+# por volta de 32 ciclos. Era artefato da amostragem, não propriedade.
+#
+# Perto das viradas o líder também oscila de janela para janela, porque numa
+# fronteira qualquer o modo pode ter acabado de concluir uma extração ou estar
+# no meio de outra. Por isso as janelas escolhidas ficam longe das viradas: 20
+# está bem dentro do território de `agressivo`, e de 120 a 200 `cuidadoso`
+# lidera de forma monotônica, com margem que só cresce.
+#
+# A janela mínima precisa comportar ao menos uma extração completa do modo mais
+# lento (`cuidadoso`: 5 × 1.4 = 7 ciclos), senão o custo por unidade é infinito.
+JANELAS_DE_OPERACAO_CONTINUA = (20, 120, 160, 200)
 
 
 def _custo_por_unidade_util(modo: str) -> dict[int, float]:
@@ -324,8 +354,12 @@ def test_lideranca_de_custo_gira_conforme_a_janela_de_operacao():
     domina o custo. Isso é uma afirmação sem constante mágica: nenhum modo é o
     mais barato em todas as janelas, então nenhuma estratégia fixa é ótima.
 
-    `agressivo` nunca lidera em custo — o que compra a permanência dele é o
-    volume bruto, coberto por `test_agressivo_deixa_de_dominar_sob_operacao_continua`.
+    A rotação vai de `agressivo` (rajada curta) a `cuidadoso` (operação
+    prolongada), passando por `normal` na faixa intermediária. `agressivo` é
+    genuinamente o modo certo para rajadas: ele lidera em custo em toda janela
+    curta. O que o desgaste tira dele é a permanência — sustentar o ritmo faz o
+    custo por unidade disparar, e é isso que
+    `test_agressivo_deixa_de_dominar_sob_operacao_continua` fixa.
     """
     por_modo = {
         modo: _custo_por_unidade_util(modo)
@@ -350,13 +384,23 @@ def test_lideranca_de_custo_gira_conforme_a_janela_de_operacao():
         f"logo é universalmente melhor: {tabela}"
     )
 
-    assert "agressivo" not in lideres.values(), (
-        f"'agressivo' lidera em custo em alguma janela, invertendo a direção "
-        f"esperada da virada: {tabela}"
-    )
-
     lider_curto = lideres[JANELAS_DE_OPERACAO_CONTINUA[0]]
     lider_longo = lideres[JANELAS_DE_OPERACAO_CONTINUA[-1]]
+
+    # As duas pontas da rotação, afirmadas separadamente. Juntas dizem mais do
+    # que a versão anterior ("agressivo nunca lidera"), que além de mais fraca
+    # era falsa: agressivo lidera em toda janela curta.
+    assert lider_curto == "agressivo", (
+        f"em rajada curta esperava-se 'agressivo' liderando — é para isso que o "
+        f"modo existe —, mas lidera '{lider_curto}': {tabela}"
+    )
+
+    janelas_longas = JANELAS_DE_OPERACAO_CONTINUA[1:]
+    assert all(lideres[janela] != "agressivo" for janela in janelas_longas), (
+        f"'agressivo' ainda lidera em custo numa janela longa {janelas_longas}: "
+        f"sustentar o ritmo deveria custar caro. {tabela}"
+    )
+
     posicao = MODOS_DO_MAIS_CONSERVADOR_AO_MAIS_INTENSO.index
     assert posicao(lider_longo) < posicao(lider_curto), (
         f"a virada aponta para o lado errado: em janela curta lidera "
