@@ -296,3 +296,54 @@ def test_interromper_extracao_impede_criacao_de_carga_e_publica_evento():
         # Verificar que o evento extracao_interrompida foi publicado
         eventos = motor.eventos.consultar_eventos()
         assert any(e.tipo == "extracao_interrompida" and e.dados["unidade"] == "mineradora-1" for e in eventos)
+
+
+def test_extracao_que_excede_a_jazida_com_desperdicio_e_rejeitada_sem_gastar_nada():
+    from mundo.api.dependencias import instancia_do_mundo
+
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 300)
+        jazida = motor.jazidas["jazida-1"]
+        # 11.0 disponível cobre a quantidade pedida (10.0), mas não o consumo real
+        # do modo agressivo: 10.0 × fator_desperdicio(1.4) = 14.0.
+        jazida.quantidade_disponivel = 11.0
+        energia_antes = motor.energia.consultar_energia("extracao")
+
+        _extrair(cliente, modo="agressivo", quantidade=10.0)
+        motor.avancar_ciclo(1)
+
+        # A validação acontece antes do débito e da transição de estado: nada é
+        # gasto e a unidade continua livre para receber outro comando.
+        assert motor.energia.consultar_energia("extracao") == energia_antes
+        assert motor.robos["mineradora-1"].estado == EstadoDoRobo.DISPONIVEL
+        assert motor.robos["mineradora-1"].desgaste == 0.0
+        assert motor.jazidas["jazida-1"].quantidade_disponivel == 11.0
+        eventos = motor.eventos.consultar_eventos()
+        assert any(
+            e.tipo == "operacao_invalida" and e.dados["comando"] == "iniciar_extracao"
+            for e in eventos
+        )
+
+
+def test_extracao_rejeitada_por_desperdicio_nao_trava_a_unidade():
+    from mundo.api.dependencias import instancia_do_mundo
+
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 300)
+        motor.jazidas["jazida-1"].quantidade_disponivel = 11.0
+
+        _extrair(cliente, modo="agressivo", quantidade=10.0)
+        motor.avancar_ciclo(30)
+
+        # Sem efeito agendado pendurado, a unidade segue disponível e uma extração
+        # dentro do que a jazida comporta ainda funciona.
+        assert motor.robos["mineradora-1"].estado == EstadoDoRobo.DISPONIVEL
+        _extrair(cliente, modo="agressivo", quantidade=7.0)
+        motor.avancar_ciclo(4)
+        assert motor.robos["mineradora-1"].estado == EstadoDoRobo.AGUARDANDO
+        assert len(motor.cargas) == 1
+        assert motor.jazidas["jazida-1"].quantidade_disponivel == pytest.approx(1.2)
