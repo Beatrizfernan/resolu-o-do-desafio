@@ -1,5 +1,10 @@
 from pathlib import Path
 
+import pytest
+from fastapi.testclient import TestClient
+
+from mundo.api.app import criar_app
+from mundo.api.dependencias import instancia_do_mundo
 from mundo.dominio.minerais import CatalogoDeMinerais
 from mundo.dominio.robos import EstadoDoRobo
 from mundo.motor.motor_de_simulacao import ConfiguracaoDaSimulacao, MotorDeSimulacao
@@ -56,3 +61,47 @@ def test_recuperacao_alcanca_todos_os_robos_disponiveis():
 
     recuperacao = motor.catalogo_de_modos.recuperacao_de_desgaste_por_ciclo
     assert all(robo.desgaste == 1.0 - recuperacao for robo in motor.robos.values())
+
+
+def _extrair(cliente, **campos):
+    corpo = {
+        "identificador_da_unidade": "mineradora-1",
+        "identificador_da_jazida": "jazida-1",
+        "quantidade": 10.0,
+    }
+    corpo.update(campos)
+    return cliente.post("/extracao/iniciar-extracao", json=corpo)
+
+
+def test_extracao_acumula_desgaste_proporcional_a_energia_gasta():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 500)
+        unidade = motor.robos["mineradora-1"]
+        energia_antes = motor.energia.consultar_energia("extracao")
+
+        _extrair(cliente)
+        motor.avancar_ciclo(1)
+
+        energia_gasta = energia_antes - motor.energia.consultar_energia("extracao")
+        esperado = energia_gasta * motor.catalogo_de_modos.taxa_de_desgaste
+        assert unidade.desgaste == pytest.approx(esperado)
+
+
+def test_unidade_desgastada_paga_mais_pela_mesma_extracao():
+    custos = {}
+    for desgaste_inicial in (0.0, 4.0):
+        app = criar_app(com_loop_real_time=False)
+        with TestClient(app) as cliente:
+            motor = instancia_do_mundo.obter_motor()
+            motor.energia.alocar_energia("reserva_estrategica", "extracao", 500)
+            motor.robos["mineradora-1"].desgaste = desgaste_inicial
+            antes = motor.energia.consultar_energia("extracao")
+
+            _extrair(cliente)
+            motor.avancar_ciclo(1)
+
+            custos[desgaste_inicial] = antes - motor.energia.consultar_energia("extracao")
+
+    assert custos[4.0] > custos[0.0]

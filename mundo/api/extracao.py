@@ -78,8 +78,10 @@ async def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
             * motor.catalogo_de_modos.fator_base_de_energia
             * perfil.mult_energia
             * motor.catalogo_de_modos.fator_de_escassez(jazida.fracao_restante)
+            * motor.catalogo_de_modos.fator_de_desgaste(unidade.desgaste)
         )
         motor.energia.debitar(CENTRAL, custo)
+        unidade.desgaste += custo * motor.catalogo_de_modos.taxa_de_desgaste
         unidade.estado = EstadoDoRobo.EXECUTANDO
         duracao = max(1, round(DURACAO_EXTRACAO_EM_CICLOS * perfil.mult_duracao))
         ciclo_conclusao = motor.ciclo_atual + duracao
@@ -116,6 +118,7 @@ async def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
                     "quantidade_consumida_da_jazida": consumido,
                     "modo": requisicao.modo.value,
                     "carga": carga.identificador,
+                    "desgaste_da_unidade": unidade.desgaste,
                 },
             )
 
