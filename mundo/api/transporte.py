@@ -126,7 +126,9 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
             * motor.catalogo_de_modos.fator_de_desgaste(unidade.desgaste)
         )
         motor.energia.debitar(CENTRAL, custo)
-        unidade.desgaste += custo * motor.catalogo_de_modos.taxa_de_desgaste
+        # O desgaste segue o ritmo de operação, não a energia gasta: quem opera
+        # em ciclos mais curtos castiga mais a máquina por unidade de tempo.
+        unidade.desgaste += motor.catalogo_de_modos.taxa_de_desgaste / perfil.mult_duracao
         unidade.viagens_disponiveis -= 1
         unidade.estado = EstadoDoRobo.EXECUTANDO
         carga = motor.cargas[requisicao.identificador_da_carga]

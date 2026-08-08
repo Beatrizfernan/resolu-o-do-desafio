@@ -7,6 +7,7 @@ from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
 from mundo.dominio.cargas import CargaMineral
 from mundo.dominio.minerais import CatalogoDeMinerais
+from mundo.dominio.modos import ModoDeExtracao, ModoDeTransporte
 from mundo.dominio.robos import EstadoDoRobo
 from mundo.motor.motor_de_simulacao import ConfiguracaoDaSimulacao, MotorDeSimulacao
 
@@ -74,19 +75,23 @@ def _extrair(cliente, **campos):
     return cliente.post("/extracao/iniciar-extracao", json=corpo)
 
 
-def test_extracao_acumula_desgaste_proporcional_a_energia_gasta():
+def test_extracao_acumula_desgaste_conforme_o_ritmo_do_modo():
+    """O desgaste mede ritmo de operação, não energia consumida.
+
+    Cada extração acumula `taxa_de_desgaste / mult_duracao`: ciclos mais curtos
+    castigam mais a máquina, independentemente do que a operação custou.
+    """
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
         motor.energia.alocar_energia("reserva_estrategica", "extracao", 500)
         unidade = motor.robos["mineradora-1"]
-        energia_antes = motor.energia.consultar_energia("extracao")
+        perfil = motor.catalogo_de_modos.obter_extracao(ModoDeExtracao.NORMAL)
 
-        _extrair(cliente)
+        _extrair(cliente, modo="normal")
         motor.avancar_ciclo(1)
 
-        energia_gasta = energia_antes - motor.energia.consultar_energia("extracao")
-        esperado = energia_gasta * motor.catalogo_de_modos.taxa_de_desgaste
+        esperado = motor.catalogo_de_modos.taxa_de_desgaste / perfil.mult_duracao
         assert unidade.desgaste == pytest.approx(esperado)
 
 
@@ -150,7 +155,7 @@ def test_viagem_acumula_desgaste_na_transportadora():
         motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
         motor.energia.alocar_energia("reserva_estrategica", "transporte", 500)
         unidade = motor.robos["transportadora-1"]
-        antes = motor.energia.consultar_energia("transporte")
+        perfil = motor.catalogo_de_modos.obter_transporte(ModoDeTransporte.NORMAL)
 
         cliente.post(
             "/transporte/iniciar-viagem",
@@ -163,6 +168,73 @@ def test_viagem_acumula_desgaste_na_transportadora():
         )
         motor.avancar_ciclo(1)
 
-        energia_gasta = antes - motor.energia.consultar_energia("transporte")
-        esperado = energia_gasta * motor.catalogo_de_modos.taxa_de_desgaste
+        esperado = motor.catalogo_de_modos.taxa_de_desgaste / perfil.mult_duracao
         assert unidade.desgaste == pytest.approx(esperado)
+
+
+CICLOS_DE_OPERACAO_CONTINUA = 60
+
+
+def _operar_continuamente(modo: str) -> tuple[float, float]:
+    """Extrai sem pausas por uma janela fixa de ciclos.
+
+    Devolve (unidades entregues, energia gasta) para o modo dado, ponderando
+    a entrega pela qualidade inicial do modo — o que interessa é valor útil,
+    não massa bruta.
+    """
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 900)
+        unidade = motor.robos["mineradora-1"]
+        perfil = motor.catalogo_de_modos.obter_extracao(ModoDeExtracao(modo))
+        energia_antes = motor.energia.consultar_energia("extracao")
+        entregue = 0.0
+
+        for _ in range(CICLOS_DE_OPERACAO_CONTINUA):
+            if unidade.estado.value == "disponivel":
+                resposta = _extrair(cliente, modo=modo, quantidade=2.0)
+                if resposta.status_code == 200:
+                    entregue += 2.0 * (perfil.qualidade_inicial / 100)
+            elif unidade.estado.value == "aguardando":
+                unidade.estado = EstadoDoRobo.DISPONIVEL
+            motor.avancar_ciclo(1)
+
+        return entregue, energia_antes - motor.energia.consultar_energia("extracao")
+
+
+def test_agressivo_deixa_de_dominar_sob_operacao_continua():
+    """O ponto do sub-projeto inteiro.
+
+    Sem desgaste, agressivo vence por 1,88x em qualquer cenário estático.
+    Sob uso contínuo ele executa mais operações por ciclo, acumula desgaste
+    mais rápido e o custo por unidade entregue passa a subir.
+    """
+    entregue_agressivo, energia_agressivo = _operar_continuamente("agressivo")
+    entregue_cuidadoso, energia_cuidadoso = _operar_continuamente("cuidadoso")
+
+    custo_agressivo = energia_agressivo / entregue_agressivo
+    custo_cuidadoso = energia_cuidadoso / entregue_cuidadoso
+
+    assert custo_agressivo > custo_cuidadoso, (
+        f"agressivo ainda domina sob uso contínuo: "
+        f"{custo_agressivo:.2f} vs {custo_cuidadoso:.2f} de energia por unidade entregue"
+    )
+
+
+def test_normal_tambem_acumula_desgaste_e_nao_tem_refugio():
+    """Impede a dominância invertida.
+
+    Se o desgaste punisse só os extremos, `normal` viraria a escolha
+    universal — o mesmo defeito com outro nome.
+    """
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 500)
+        unidade = motor.robos["mineradora-1"]
+
+        _extrair(cliente, modo="normal")
+        motor.avancar_ciclo(1)
+
+        assert unidade.desgaste > 0.0

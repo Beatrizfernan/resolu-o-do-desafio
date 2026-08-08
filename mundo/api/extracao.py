@@ -81,7 +81,9 @@ async def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
             * motor.catalogo_de_modos.fator_de_desgaste(unidade.desgaste)
         )
         motor.energia.debitar(CENTRAL, custo)
-        unidade.desgaste += custo * motor.catalogo_de_modos.taxa_de_desgaste
+        # O desgaste segue o ritmo de operação, não a energia gasta: quem opera
+        # em ciclos mais curtos castiga mais a máquina por unidade de tempo.
+        unidade.desgaste += motor.catalogo_de_modos.taxa_de_desgaste / perfil.mult_duracao
         unidade.estado = EstadoDoRobo.EXECUTANDO
         duracao = max(1, round(DURACAO_EXTRACAO_EM_CICLOS * perfil.mult_duracao))
         ciclo_conclusao = motor.ciclo_atual + duracao
