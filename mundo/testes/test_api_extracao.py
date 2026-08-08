@@ -38,7 +38,7 @@ def test_iniciar_extracao_e_aceita_e_processada_no_proximo_ciclo():
         assert motor.robos["mineradora-1"].estado.value == "aguardando"
 
 
-def test_extracao_concluida_cria_carga_com_qualidade_maxima():
+def test_extracao_concluida_cria_carga_que_ja_degrada_no_ciclo_de_criacao():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         jazidas = cliente.get("/extracao/jazidas").json()
@@ -61,7 +61,14 @@ def test_extracao_concluida_cria_carga_com_qualidade_maxima():
         carga = next(iter(motor.cargas.values()))
         assert carga.mineral == jazida["mineral"]
         assert carga.quantidade == 10.0
-        assert carga.qualidade == 100.0
+        # A carga nasce com qualidade máxima e sofre a degradação do ciclo em que foi criada.
+        mineral = motor.catalogo_de_minerais.obter(carga.mineral)
+        perda = (
+            mineral.taxa_degradacao
+            * carga.sensibilidade_aplicavel(mineral)
+            * motor.catalogo_de_modos.mult_do_local(carga.local.value)
+        )
+        assert carga.qualidade == 100.0 - perda
 
 
 def test_interromper_extracao_muda_estado_para_retornando():

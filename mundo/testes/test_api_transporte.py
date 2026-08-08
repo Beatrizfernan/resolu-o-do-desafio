@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
@@ -244,7 +245,18 @@ def test_viagem_conclui_apos_o_tempo_base_degradando_a_carga():
 
         assert "transporte_concluido" in _tipos_de_eventos(motor)
         assert motor.robos["transportadora-1"].estado.value == "retornando"
-        assert motor.cargas["carga-1"].qualidade == 90.0 - motor.rotas["rota-1"].risco
+        # Além do risco da rota, a carga sofre a degradação por ciclo em cada um dos
+        # 1 + tempo_base ciclos avançados acima.
+        carga = motor.cargas["carga-1"]
+        mineral = motor.catalogo_de_minerais.obter(carga.mineral)
+        perda_por_ciclo = (
+            mineral.taxa_degradacao
+            * carga.sensibilidade_aplicavel(mineral)
+            * motor.catalogo_de_modos.mult_do_local(carga.local.value)
+        )
+        ciclos = 1 + motor.rotas["rota-1"].tempo_base
+        esperado = 90.0 - motor.rotas["rota-1"].risco - perda_por_ciclo * ciclos
+        assert carga.qualidade == pytest.approx(esperado)
 
 
 def test_abortar_viagem_coloca_a_unidade_em_retornando():

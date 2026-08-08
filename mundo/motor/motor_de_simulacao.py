@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
+from pathlib import Path
 
 from mundo.dominio.armazens import Armazem
 from mundo.dominio.autorizacao import RegistroDeAutorizacoes
@@ -9,6 +10,7 @@ from mundo.dominio.cargas import CargaMineral
 from mundo.dominio.energia import GerenciadorDeEnergia
 from mundo.dominio.jazidas import EstadoDaJazida, Jazida
 from mundo.dominio.minerais import CatalogoDeMinerais
+from mundo.dominio.modos import CatalogoDeModos
 from mundo.dominio.robos import EstadoDoRobo, Robo, UnidadeMineradora, UnidadeTransportadora
 from mundo.dominio.rotas import Rota
 from mundo.eventos.barramento import BarramentoDeEventos
@@ -17,6 +19,7 @@ from .comandos import Comando, FilaDeComandos
 from .efeitos import AgendaDeEfeitos
 
 CENTRAIS = ["extracao", "armazenagem", "transporte", "pesquisa", "missao"]
+CAMINHO_MODOS_PADRAO = Path(__file__).parent.parent / "config" / "modos.json"
 
 
 @dataclass
@@ -29,10 +32,16 @@ class ConfiguracaoDaSimulacao:
 
 class MotorDeSimulacao:
     def __init__(
-        self, configuracao: ConfiguracaoDaSimulacao, catalogo_de_minerais: CatalogoDeMinerais,
+        self,
+        configuracao: ConfiguracaoDaSimulacao,
+        catalogo_de_minerais: CatalogoDeMinerais,
+        catalogo_de_modos: CatalogoDeModos | None = None,
     ) -> None:
         self.configuracao = configuracao
         self.catalogo_de_minerais = catalogo_de_minerais
+        self.catalogo_de_modos = catalogo_de_modos or CatalogoDeModos.carregar_de_arquivo(
+            CAMINHO_MODOS_PADRAO,
+        )
         self.ciclo_atual = 0
         self.rng = random.Random(configuracao.semente)
         self.energia = GerenciadorDeEnergia(
@@ -86,6 +95,18 @@ class MotorDeSimulacao:
                     "motivo": str(erro),
                 },
             )
+        self._degradar_cargas()
+
+    def _degradar_cargas(self) -> None:
+        for carga in self.cargas.values():
+            mineral = self.catalogo_de_minerais.obter(carga.mineral)
+            perda = (
+                mineral.taxa_degradacao
+                * carga.sensibilidade_aplicavel(mineral)
+                * self.catalogo_de_modos.mult_do_local(carga.local.value)
+                * carga.mult_degradacao_local
+            )
+            carga.degradar(taxa_degradacao=perda)
 
     def _gerar_mundo_inicial(self) -> None:
         contador_jazidas = 1
