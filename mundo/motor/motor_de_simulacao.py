@@ -96,6 +96,7 @@ class MotorDeSimulacao:
                 },
             )
         self._degradar_cargas()
+        self._recuperar_desgaste()
 
     def _degradar_cargas(self) -> None:
         for carga in self.cargas.values():
@@ -107,6 +108,12 @@ class MotorDeSimulacao:
                 * carga.mult_degradacao_local
             )
             carga.degradar(taxa_degradacao=perda)
+
+    def _recuperar_desgaste(self) -> None:
+        recuperacao = self.catalogo_de_modos.recuperacao_de_desgaste_por_ciclo
+        for robo in self.robos.values():
+            if robo.estado == EstadoDoRobo.DISPONIVEL:
+                robo.desgaste = max(0.0, robo.desgaste - recuperacao)
 
     def _gerar_mundo_inicial(self) -> None:
         contador_jazidas = 1
