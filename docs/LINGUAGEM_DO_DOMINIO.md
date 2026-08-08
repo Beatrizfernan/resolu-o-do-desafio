@@ -82,6 +82,8 @@ Soma dos valores efetivos de todas as cargas que passaram por `preparar_distribu
 
 Parâmetro opcional de uma ação que escolhe um ponto no trade-off entre energia, tempo, qualidade e desperdício. Extração aceita `cuidadoso`, `normal` e `agressivo`; transporte aceita `economico`, `normal` e `rapido`. O default é sempre `normal`. Nenhum modo é globalmente superior: cada um vence em algum cenário, e a suíte de dominância existe para garantir isso.
 
+O desgaste incide sobre todos os modos, não só sobre os extremos. Um modo isento viraria a escolha universal e a decisão deixaria de existir — não é hipótese: uma calibração anterior deste sub-projeto produziu exatamente isso, com `normal` virando o modo mais barato, e teve de ser corrigida.
+
 ## Perfil de Modo
 
 Conjunto de multiplicadores que define um modo, carregado de `mundo/config/modos.json`. Multiplicam os valores base da ação — nunca os substituem — para que modificadores futuros possam compor sobre eles.
@@ -101,3 +103,17 @@ Perda de qualidade aplicada a toda carga a cada ciclo:
 `taxa_degradacao do mineral × sensibilidade do local × fator de localização × fator do modo`
 
 O `fator de localização` (`modos.json`'s `multiplicador_por_local`) depende do estado da carga: 2.0 exposta na jazida, 1.0 em armazém ou em trânsito, 0.0 entregue. O `fator do modo` é o `mult_degradacao` do modo de transporte ativo (1.0 para `normal`, 0.5 para `rapido`, 2.5 para `economico`), aplicado enquanto a carga viaja. Minerais estáveis como a hematita quase não perdem qualidade parados; o gelo de água perde rápido. Urgência é propriedade do mineral, não regra especial.
+
+## Desgaste
+
+Acúmulo em `Robo.desgaste` provocado por operar. Cada operação soma `taxa_de_desgaste / perfil.mult_duracao` (1.0 e os multiplicadores de duração em `modos.json`), logo após o débito de energia, tanto em `mundo/api/extracao.py` quanto em `mundo/api/transporte.py`. O desgaste segue o **ritmo** da operação, não a energia gasta nela: modos mais rápidos concluem mais operações na mesma janela e por isso acumulam mais depressa. Nunca fica negativo.
+
+## Recuperação
+
+Alívio automático do desgaste: a cada ciclo o motor subtrai `recuperacao_de_desgaste_por_ciclo` (0.15) do desgaste de todo robô em `DISPONIVEL`, com piso em zero. Não há ação de manutenção nem endpoint — o custo de recuperar é o tempo ocioso, que já é um custo real porque ciclos e energia são finitos. Pausar é decisão pura de escalonamento.
+
+## Fator de Desgaste
+
+`1.0 + desgaste × sensibilidade_ao_desgaste` (0.65), multiplicado no custo de energia da operação seguinte, no mesmo ponto de composição onde já entram o multiplicador do modo e o fator de escassez. Não há teto nem parada forçada: a pressão para pausar é econômica, não proibitiva.
+
+O efeito é que o modo mais barato depende de por quanto tempo a operação é sustentada: `normal` vence em rajadas curtas, `cuidadoso` assume a partir de aproximadamente 70 ciclos de operação contínua, e `agressivo` nunca é o mais barato por unidade útil embora sempre entregue o maior volume bruto. Não existe modo universalmente correto — a decisão real que o mecanismo cria é *quando pausar*, não *qual modo escolher*. Fixado por `test_lideranca_de_custo_gira_conforme_a_janela_de_operacao`.
