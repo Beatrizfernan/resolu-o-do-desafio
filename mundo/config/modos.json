@@ -1,0 +1,19 @@
+{
+  "fator_base_de_energia": 0.2,
+  "extracao": {
+    "cuidadoso": {"mult_energia": 1.6, "mult_duracao": 1.4, "qualidade_inicial": 100.0, "fator_desperdicio": 1.0},
+    "normal": {"mult_energia": 1.0, "mult_duracao": 1.0, "qualidade_inicial": 92.0, "fator_desperdicio": 1.15},
+    "agressivo": {"mult_energia": 0.7, "mult_duracao": 0.6, "qualidade_inicial": 78.0, "fator_desperdicio": 1.4}
+  },
+  "transporte": {
+    "economico": {"mult_energia": 0.6, "mult_duracao": 1.5, "mult_degradacao": 1.3},
+    "normal": {"mult_energia": 1.0, "mult_duracao": 1.0, "mult_degradacao": 1.0},
+    "rapido": {"mult_energia": 1.8, "mult_duracao": 0.6, "mult_degradacao": 0.8}
+  },
+  "multiplicador_por_local": {
+    "em_jazida": 2.0,
+    "em_armazem": 1.0,
+    "em_transito": 1.0,
+    "entregue": 0.0
+  }
+}
