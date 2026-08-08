@@ -175,14 +175,17 @@ def test_viagem_acumula_desgaste_na_transportadora():
 CICLOS_DE_OPERACAO_CONTINUA = 60
 
 
-def _operar_continuamente(
-    modo: str, ciclos: int = CICLOS_DE_OPERACAO_CONTINUA
-) -> tuple[float, float]:
-    """Extrai sem pausas por uma janela de `ciclos` ciclos.
+def _simular_operacao_continua(
+    modo: str, janelas: tuple[int, ...]
+) -> dict[int, tuple[float, float]]:
+    """Extrai sem pausas e fotografa a conta ao cruzar cada janela.
 
-    Devolve (unidades entregues, energia gasta) para o modo dado, ponderando
-    a entrega pela qualidade inicial do modo — o que interessa é valor útil,
-    não massa bruta.
+    Cada janela é um prefixo da seguinte, então uma única simulação atende
+    todas elas — medir quatro janelas custa uma execução, não quatro.
+
+    Devolve, por janela, (unidades entregues, energia gasta), ponderando a
+    entrega pela qualidade inicial do modo: o que interessa é valor útil, não
+    massa bruta.
     """
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
@@ -192,8 +195,9 @@ def _operar_continuamente(
         perfil = motor.catalogo_de_modos.obter_extracao(ModoDeExtracao(modo))
         energia_antes = motor.energia.consultar_energia("extracao")
         entregue = 0.0
+        fotos: dict[int, tuple[float, float]] = {}
 
-        for _ in range(ciclos):
+        for ciclo in range(1, max(janelas) + 1):
             if unidade.estado.value == "disponivel":
                 resposta = _extrair(cliente, modo=modo, quantidade=2.0)
                 if resposta.status_code == 200:
@@ -201,8 +205,18 @@ def _operar_continuamente(
             elif unidade.estado.value == "aguardando":
                 unidade.estado = EstadoDoRobo.DISPONIVEL
             motor.avancar_ciclo(1)
+            if ciclo in janelas:
+                gasto = energia_antes - motor.energia.consultar_energia("extracao")
+                fotos[ciclo] = (entregue, gasto)
 
-        return entregue, energia_antes - motor.energia.consultar_energia("extracao")
+        return fotos
+
+
+def _operar_continuamente(
+    modo: str, ciclos: int = CICLOS_DE_OPERACAO_CONTINUA
+) -> tuple[float, float]:
+    """(unidades entregues, energia gasta) numa única janela de `ciclos` ciclos."""
+    return _simular_operacao_continua(modo, (ciclos,))[ciclos]
 
 
 def test_agressivo_deixa_de_dominar_sob_operacao_continua():
@@ -235,9 +249,10 @@ MODOS_DO_MAIS_CONSERVADOR_AO_MAIS_INTENSO = ("cuidadoso", "normal", "agressivo")
 JANELAS_DE_OPERACAO_CONTINUA = (40, 60, 80, 120)
 
 
-def _custo_por_unidade_util(modo: str, ciclos: int) -> float:
-    entregue, energia = _operar_continuamente(modo, ciclos)
-    return energia / entregue
+def _custo_por_unidade_util(modo: str) -> dict[int, float]:
+    """Custo por unidade útil do modo em cada janela, numa só simulação."""
+    fotos = _simular_operacao_continua(modo, JANELAS_DE_OPERACAO_CONTINUA)
+    return {janela: energia / entregue for janela, (entregue, energia) in fotos.items()}
 
 
 def test_lideranca_de_custo_gira_conforme_a_janela_de_operacao():
@@ -255,11 +270,12 @@ def test_lideranca_de_custo_gira_conforme_a_janela_de_operacao():
     `agressivo` nunca lidera em custo — o que compra a permanência dele é o
     volume bruto, coberto por `test_agressivo_deixa_de_dominar_sob_operacao_continua`.
     """
+    por_modo = {
+        modo: _custo_por_unidade_util(modo)
+        for modo in MODOS_DO_MAIS_CONSERVADOR_AO_MAIS_INTENSO
+    }
     custos = {
-        janela: {
-            modo: _custo_por_unidade_util(modo, janela)
-            for modo in MODOS_DO_MAIS_CONSERVADOR_AO_MAIS_INTENSO
-        }
+        janela: {modo: por_modo[modo][janela] for modo in por_modo}
         for janela in JANELAS_DE_OPERACAO_CONTINUA
     }
     lideres = {
