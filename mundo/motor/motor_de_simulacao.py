@@ -122,6 +122,7 @@ class MotorDeSimulacao:
                     dificuldade_extracao=mineral.custo_extracao,
                     risco=self.rng.uniform(0.0, 0.3),
                     estado=EstadoDaJazida.DISPONIVEL,
+                    quantidade_inicial=quantidade,
                 )
                 contador_jazidas += 1
 

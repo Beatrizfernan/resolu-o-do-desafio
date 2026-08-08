@@ -53,6 +53,20 @@ def test_fator_base_de_energia_disponivel():
     assert _catalogo().fator_base_de_energia == 0.2
 
 
+def test_fator_de_escassez_cresce_conforme_a_jazida_esvazia():
+    catalogo = _catalogo()
+    assert catalogo.fator_de_escassez(1.0) == 1.0
+    assert catalogo.fator_de_escassez(0.5) > catalogo.fator_de_escassez(1.0)
+    assert catalogo.fator_de_escassez(0.1) > catalogo.fator_de_escassez(0.5)
+
+
+def test_fator_de_escassez_e_sempre_positivo_e_finito():
+    catalogo = _catalogo()
+    for fracao in (0.0, 1e-12, 0.5, 1.0):
+        fator = catalogo.fator_de_escassez(fracao)
+        assert 1.0 <= fator <= catalogo.fator_escassez_maximo
+
+
 def test_local_desconhecido_lanca_erro():
     with pytest.raises(ValueError):
         _catalogo().mult_do_local("inexistente")

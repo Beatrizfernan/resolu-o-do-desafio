@@ -34,6 +34,18 @@ class Jazida:
     dificuldade_extracao: float
     risco: float
     estado: EstadoDaJazida = EstadoDaJazida.DESCONHECIDA
+    quantidade_inicial: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.quantidade_inicial is None:
+            self.quantidade_inicial = self.quantidade_disponivel
+
+    @property
+    def fracao_restante(self) -> float:
+        """Quanto da jazida ainda existe, entre 0.0 (exaurida) e 1.0 (intacta)."""
+        if not self.quantidade_inicial:
+            return 0.0
+        return max(0.0, min(1.0, self.quantidade_disponivel / self.quantidade_inicial))
 
     def transicionar(self, novo_estado: EstadoDaJazida) -> None:
         if novo_estado not in _TRANSICOES_VALIDAS[self.estado]:
