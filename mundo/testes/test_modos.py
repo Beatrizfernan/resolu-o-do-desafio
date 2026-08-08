@@ -70,3 +70,25 @@ def test_fator_de_escassez_e_sempre_positivo_e_finito():
 def test_local_desconhecido_lanca_erro():
     with pytest.raises(ValueError):
         _catalogo().mult_do_local("inexistente")
+
+
+def test_fatores_de_desgaste_disponiveis():
+    catalogo = _catalogo()
+    assert catalogo.taxa_de_desgaste > 0
+    assert catalogo.recuperacao_de_desgaste_por_ciclo > 0
+    assert catalogo.sensibilidade_ao_desgaste > 0
+
+
+def test_fator_de_desgaste_e_neutro_quando_o_robo_esta_descansado():
+    assert _catalogo().fator_de_desgaste(0.0) == 1.0
+
+
+def test_fator_de_desgaste_cresce_com_o_desgaste():
+    catalogo = _catalogo()
+    assert catalogo.fator_de_desgaste(4.0) > catalogo.fator_de_desgaste(1.0) > 1.0
+
+
+def test_fator_de_desgaste_e_linear_na_sensibilidade():
+    catalogo = _catalogo()
+    esperado = 1.0 + 2.0 * catalogo.sensibilidade_ao_desgaste
+    assert catalogo.fator_de_desgaste(2.0) == pytest.approx(esperado)

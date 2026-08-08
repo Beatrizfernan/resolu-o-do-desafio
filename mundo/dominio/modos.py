@@ -42,6 +42,9 @@ class CatalogoDeModos:
         multiplicador_por_local: dict[str, float],
         fator_escassez_maximo: float = 1.0,
         expoente_escassez: float = 0.0,
+        taxa_de_desgaste: float = 0.0,
+        recuperacao_de_desgaste_por_ciclo: float = 0.0,
+        sensibilidade_ao_desgaste: float = 0.0,
     ) -> None:
         self._extracao = extracao
         self._transporte = transporte
@@ -49,6 +52,9 @@ class CatalogoDeModos:
         self._multiplicador_por_local = multiplicador_por_local
         self.fator_escassez_maximo = fator_escassez_maximo
         self.expoente_escassez = expoente_escassez
+        self.taxa_de_desgaste = taxa_de_desgaste
+        self.recuperacao_de_desgaste_por_ciclo = recuperacao_de_desgaste_por_ciclo
+        self.sensibilidade_ao_desgaste = sensibilidade_ao_desgaste
 
     @classmethod
     def carregar_de_arquivo(cls, caminho: Path) -> "CatalogoDeModos":
@@ -64,6 +70,9 @@ class CatalogoDeModos:
             dados["multiplicador_por_local"],
             dados["fator_escassez_maximo"],
             dados["expoente_escassez"],
+            dados["taxa_de_desgaste"],
+            dados["recuperacao_de_desgaste_por_ciclo"],
+            dados["sensibilidade_ao_desgaste"],
         )
 
     def obter_extracao(self, modo: ModoDeExtracao) -> PerfilDeExtracao:
@@ -92,6 +101,14 @@ class CatalogoDeModos:
             return self.fator_escassez_maximo
         fracao = min(1.0, fracao_restante)
         return min(self.fator_escassez_maximo, fracao ** -self.expoente_escassez)
+
+    def fator_de_desgaste(self, desgaste: float) -> float:
+        """Quanto o desgaste acumulado encarece a próxima operação.
+
+        Cresce linearmente e sem teto: um robô nunca é bloqueado, só fica
+        progressivamente caro de operar até que descanse.
+        """
+        return 1.0 + max(0.0, desgaste) * self.sensibilidade_ao_desgaste
 
     def mult_do_local(self, local: str) -> float:
         if local not in self._multiplicador_por_local:
