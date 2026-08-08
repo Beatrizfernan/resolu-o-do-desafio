@@ -110,6 +110,8 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
     rota = motor.rotas.get(requisicao.identificador_da_rota)
     if unidade is None or rota is None:
         raise HTTPException(status_code=404, detail="Unidade ou rota não encontrada")
+    if motor.cargas.get(requisicao.identificador_da_carga) is None:
+        raise HTTPException(status_code=404, detail="Carga não encontrada")
 
     def executar() -> None:
         motor.autorizacoes.consumir(requisicao.id_autorizacao, "iniciar_viagem")

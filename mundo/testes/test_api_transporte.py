@@ -231,6 +231,27 @@ def test_iniciar_viagem_com_rota_inexistente_retorna_404():
         assert resposta.status_code == 404
 
 
+def test_iniciar_viagem_com_carga_inexistente_retorna_404_sem_consumir_nada():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        energia_antes = motor.energia.consultar_energia("transporte")
+
+        resposta = cliente.post("/transporte/iniciar-viagem", json={
+            "identificador_da_unidade": "transportadora-1", "identificador_da_rota": "rota-1",
+            "identificador_da_carga": "carga-inexistente", "id_autorizacao": _autorizar(cliente),
+        })
+        motor.avancar_ciclo(1)
+
+        # A carga é validada no handler, antes de enfileirar o comando: nem a autorização,
+        # nem a energia, nem a viagem disponível são consumidas, e a unidade não trava
+        # em "executando" sem efeito agendado para liberá-la.
+        assert resposta.status_code == 404
+        assert motor.robos["transportadora-1"].estado.value == "disponivel"
+        assert motor.robos["transportadora-1"].viagens_disponiveis == 10
+        assert motor.energia.consultar_energia("transporte") == energia_antes
+
+
 def test_viagem_conclui_apos_o_tempo_base_degradando_a_carga():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
