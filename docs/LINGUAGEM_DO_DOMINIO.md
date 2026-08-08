@@ -88,7 +88,7 @@ Conjunto de multiplicadores que define um modo, carregado de `mundo/config/modos
 
 ## Desperdício
 
-Minério consumido da jazida além do que a carga recebe. Extração agressiva debita `quantidade × fator_desperdicio` da jazida e entrega apenas `quantidade`. A diferença some do mundo permanentemente: é o custo global de uma otimização local. A penalidade estratégica é ponderada pela raridade do mineral — uma jazida finita é irreponível — fazendo a destruição de um mineral raro custar quase o dobro do valor tabelado, enquanto desperdiçar um mineral abundante custa praticamente só o valor de face. Por isso extração cuidadosa vence em minerais raros e agressiva em abundantes.
+Minério consumido da jazida além do que a carga recebe. Extração agressiva debita `quantidade × fator_desperdicio` da jazida e entrega apenas `quantidade`. A diferença some do mundo permanentemente: é o custo global de uma otimização local. O motor debita sempre o valor base; a ponderação estratégica pela raridade existe na métrica de dominância: uma jazida finita é insubstituível, então a perda de um mineral raro custa quase o dobro do valor tabelado na avaliação de qualidade de estratégia, enquanto desperdiçar um mineral abundante custa praticamente só o valor de face. Por isso extração cuidadosa vence em minerais raros e agressiva em abundantes.
 
 ## Local da Carga
 
@@ -98,6 +98,6 @@ Onde a carga está: `em_jazida` (exposta, sem proteção), `em_armazem`, `em_tra
 
 Perda de qualidade aplicada a toda carga a cada ciclo:
 
-`taxa_degradacao do mineral × sensibilidade do local × multiplicador do local × multiplicador de contexto`
+`taxa_degradacao do mineral × sensibilidade do local × fator de localização × fator do modo`
 
-Minerais estáveis como a hematita quase não perdem qualidade parados; o gelo de água perde rápido. Urgência é propriedade do mineral, não regra especial.
+O `fator de localização` (`modos.json`'s `multiplicador_por_local`) depende do estado da carga: 2.0 exposta na jazida, 1.0 em armazém ou em trânsito, 0.0 entregue. O `fator do modo` é o `mult_degradacao` do modo de transporte ativo (1.0 para `normal`, 0.5 para `rapido`, 2.5 para `economico`), aplicado enquanto a carga viaja. Minerais estáveis como a hematita quase não perdem qualidade parados; o gelo de água perde rápido. Urgência é propriedade do mineral, não regra especial.
