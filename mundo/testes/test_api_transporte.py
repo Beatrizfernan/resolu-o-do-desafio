@@ -247,12 +247,84 @@ def test_viagem_conclui_apos_o_tempo_base_degradando_a_carga():
 
         assert "transporte_concluido" in _tipos_de_eventos(motor)
         assert motor.robos["transportadora-1"].estado.value == "retornando"
-        # A carga permanece em jazida durante toda a viagem (nada move o local ainda);
-        # hematita em jazida perde 0.2 × 1.0 × 2.0 = 0.4 por ciclo, em 1 + tempo_base = 6
-        # ciclos, mais o risco 0.05 da rota: 90.0 - 0.05 - 2.4 = 87.55.
+        # A viagem move a carga para em_transito no ciclo 1 e a devolve ao armazém no
+        # ciclo de chegada (1 + tempo_base = 6), antes da degradação daquele ciclo.
+        # Em trânsito (ciclos 1..5, modo normal): 0.2 × 0.1 × 1.0 × 1.0 = 0.02 por ciclo
+        # → 0.1; no armazém (ciclo 6): 0.2 × 0.1 × 1.0 × 1.0 = 0.02.
+        # 90.0 - 0.1 - 0.02 = 89.88.
         carga = motor.cargas["carga-1"]
-        assert carga.local == LocalDaCarga.EM_JAZIDA
-        assert carga.qualidade == pytest.approx(87.55)
+        assert carga.local == LocalDaCarga.EM_ARMAZEM
+        assert carga.qualidade == pytest.approx(89.88)
+
+
+def test_modo_rapido_chega_antes_e_gasta_mais_energia_que_o_economico():
+    from mundo.api.dependencias import instancia_do_mundo
+
+    duracoes = {}
+    custos = {}
+    for modo in ("economico", "rapido"):
+        app = criar_app(com_loop_real_time=False)
+        with TestClient(app) as cliente:
+            motor = instancia_do_mundo.obter_motor()
+            motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+            motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
+            energia_antes = motor.energia.consultar_energia("transporte")
+
+            id_autorizacao = _autorizar(cliente)
+            _iniciar_viagem(cliente, id_autorizacao=id_autorizacao, modo=modo)
+            motor.avancar_ciclo(1)
+
+            custos[modo] = energia_antes - motor.energia.consultar_energia("transporte")
+            ciclos = 0
+            while motor.robos["transportadora-1"].estado.value == "executando" and ciclos < 40:
+                motor.avancar_ciclo(1)
+                ciclos += 1
+            duracoes[modo] = ciclos
+
+    assert duracoes["rapido"] < duracoes["economico"]
+    assert custos["rapido"] > custos["economico"]
+
+
+def test_carga_fica_em_transito_durante_a_viagem_e_volta_ao_armazem():
+    from mundo.api.dependencias import instancia_do_mundo
+
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.cargas["carga-1"] = CargaMineral(
+            "carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.EM_ARMAZEM,
+        )
+        motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
+
+        id_autorizacao = _autorizar(cliente)
+        _iniciar_viagem(cliente, id_autorizacao=id_autorizacao, modo="normal")
+        motor.avancar_ciclo(1)
+        assert motor.cargas["carga-1"].local == LocalDaCarga.EM_TRANSITO
+
+        motor.avancar_ciclo(10)
+        assert motor.cargas["carga-1"].local == LocalDaCarga.EM_ARMAZEM
+
+
+def test_transporte_economico_degrada_mais_a_carga_que_o_rapido():
+    from mundo.api.dependencias import instancia_do_mundo
+
+    qualidades = {}
+    for modo in ("economico", "rapido"):
+        app = criar_app(com_loop_real_time=False)
+        with TestClient(app) as cliente:
+            motor = instancia_do_mundo.obter_motor()
+            motor.cargas["carga-1"] = CargaMineral(
+                "carga-1", "jarosita", 10.0, 100.0, local=LocalDaCarga.EM_ARMAZEM,
+            )
+            motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
+
+            id_autorizacao = _autorizar(cliente)
+            _iniciar_viagem(cliente, id_autorizacao=id_autorizacao, modo=modo)
+            for _ in range(20):
+                motor.avancar_ciclo(1)
+            qualidades[modo] = motor.cargas["carga-1"].qualidade
+
+    assert qualidades["rapido"] > qualidades["economico"]
 
 
 def test_abortar_viagem_coloca_a_unidade_em_retornando():

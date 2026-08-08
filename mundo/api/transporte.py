@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from mundo.dominio.cargas import LocalDaCarga
+from mundo.dominio.modos import ModoDeTransporte
 from mundo.dominio.robos import EstadoDoRobo
 from mundo.dominio.rotas import CondicaoDaRota
 from mundo.motor.comandos import Comando
@@ -98,6 +100,7 @@ class RequisicaoDeViagem(BaseModel):
     identificador_da_rota: str
     identificador_da_carga: str
     id_autorizacao: str
+    modo: ModoDeTransporte = ModoDeTransporte.NORMAL
 
 
 @router.post("/iniciar-viagem")
@@ -114,19 +117,29 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
             raise ValueError("Rota interditada")
         if unidade.viagens_disponiveis <= 0:
             raise ValueError("Sem viagens disponíveis")
-        motor.energia.debitar(CENTRAL, CUSTO_ENERGETICO_VIAGEM)
+        perfil = motor.catalogo_de_modos.obter_transporte(requisicao.modo)
+        motor.energia.debitar(CENTRAL, CUSTO_ENERGETICO_VIAGEM * perfil.mult_energia)
         unidade.viagens_disponiveis -= 1
         unidade.estado = EstadoDoRobo.EXECUTANDO
-        ciclo_chegada = motor.ciclo_atual + rota.tempo_base
+        carga = motor.cargas[requisicao.identificador_da_carga]
+        carga.local = LocalDaCarga.EM_TRANSITO
+        carga.mult_degradacao_local = perfil.mult_degradacao
+        duracao = max(1, round(rota.tempo_base * perfil.mult_duracao))
+        ciclo_chegada = motor.ciclo_atual + duracao
 
         def concluir() -> None:
-            carga = motor.cargas[requisicao.identificador_da_carga]
-            carga.degradar(taxa_degradacao=rota.risco, fator_contexto=1.0)
+            carga_em_transito = motor.cargas[requisicao.identificador_da_carga]
+            carga_em_transito.local = LocalDaCarga.EM_ARMAZEM
+            carga_em_transito.mult_degradacao_local = 1.0
             unidade.estado = EstadoDoRobo.RETORNANDO
             motor.eventos.publicar(
                 "transporte_concluido",
                 motor.ciclo_atual,
-                {"unidade": unidade.identificador, "carga": carga.identificador},
+                {
+                    "unidade": unidade.identificador,
+                    "carga": carga_em_transito.identificador,
+                    "modo": requisicao.modo.value,
+                },
             )
 
         motor.agendar_efeito(ciclo_chegada, concluir)
