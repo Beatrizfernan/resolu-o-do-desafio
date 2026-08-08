@@ -172,6 +172,63 @@ def test_viagem_acumula_desgaste_na_transportadora():
         assert unidade.desgaste == pytest.approx(esperado)
 
 
+def _desgaste_de_uma_viagem(modo: str) -> tuple[float, float, float]:
+    """(desgaste acumulado, mult_duracao do modo, taxa_de_desgaste) numa viagem."""
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.energia.alocar_energia("reserva_estrategica", "transporte", 500)
+        unidade = motor.robos["transportadora-1"]
+
+        cliente.post(
+            "/transporte/iniciar-viagem",
+            json={
+                "identificador_da_unidade": "transportadora-1",
+                "identificador_da_rota": "rota-1",
+                "identificador_da_carga": "carga-1",
+                "modo": modo,
+                "id_autorizacao": _autorizar(cliente),
+            },
+        )
+        motor.avancar_ciclo(1)
+        perfil = motor.catalogo_de_modos.obter_transporte(ModoDeTransporte(modo))
+        return (
+            unidade.desgaste,
+            perfil.mult_duracao,
+            motor.catalogo_de_modos.taxa_de_desgaste,
+        )
+
+
+def test_desgaste_da_viagem_escala_com_o_ritmo_do_modo():
+    """O divisor `mult_duracao` precisa estar preso por um modo em que ele ≠ 1.
+
+    `test_viagem_acumula_desgaste_na_transportadora` usa `normal`, cujo
+    `mult_duracao` é exatamente 1.0 — dividir por 1.0 é inócuo, então aquele
+    teste passa igual se o divisor for apagado. Sem este teste, o desgaste do
+    transporte poderia virar custo fixo por operação sem nada acusar, e
+    `rapido` deixaria de pagar por operar em ritmo dobrado: a mesma classe de
+    falha que o desgaste existe para corrigir, sobrevivendo neste eixo.
+
+    A asserção é relacional para continuar significando o mesmo se a
+    calibração dos perfis mudar.
+    """
+    medidas = {modo: _desgaste_de_uma_viagem(modo) for modo in ("economico", "rapido")}
+
+    for modo, (desgaste, mult_duracao, taxa) in medidas.items():
+        assert mult_duracao != 1.0, f"'{modo}' perdeu a serventia aqui: mult_duracao virou 1.0"
+        assert desgaste == pytest.approx(taxa / mult_duracao)
+
+    desgaste_economico, mult_economico, _ = medidas["economico"]
+    desgaste_rapido, mult_rapido, _ = medidas["rapido"]
+    assert desgaste_rapido / desgaste_economico == pytest.approx(
+        mult_economico / mult_rapido
+    ), (
+        "o desgaste do transporte deixou de escalar com o ritmo: "
+        f"rapido={desgaste_rapido:.3f}, economico={desgaste_economico:.3f}"
+    )
+
+
 CICLOS_DE_OPERACAO_CONTINUA = 60
 
 
