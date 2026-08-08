@@ -184,7 +184,7 @@ def test_modo_agressivo_conclui_antes_do_cuidadoso():
         assert motor.robos["mineradora-2"].estado.value == "executando"
 
 
-def test_custo_energetico_deriva_do_mineral_e_do_modo():
+def _custo_de_uma_extracao(modo):
     from mundo.api.dependencias import instancia_do_mundo
 
     app = criar_app(com_loop_real_time=False)
@@ -194,11 +194,33 @@ def test_custo_energetico_deriva_do_mineral_e_do_modo():
         mineral = motor.catalogo_de_minerais.obter(motor.jazidas["jazida-1"].mineral)
         antes = motor.energia.consultar_energia("extracao")
 
-        _extrair(cliente, modo="normal")
+        _extrair(cliente, modo=modo)
         motor.avancar_ciclo(1)
 
-        esperado = mineral.custo_extracao * 10.0 * 0.2 * 1.0
-        assert antes - motor.energia.consultar_energia("extracao") == pytest.approx(esperado)
+        return mineral.custo_extracao, antes - motor.energia.consultar_energia("extracao")
+
+
+def test_custo_energetico_deriva_do_mineral_e_do_modo():
+    custo_extracao, cobrado = _custo_de_uma_extracao("normal")
+
+    esperado = custo_extracao * 10.0 * 0.2 * 1.0
+    assert cobrado == pytest.approx(esperado)
+
+
+def test_custo_energetico_escala_com_o_mult_energia_do_modo():
+    # Agressivo gasta menos energia por unidade (mult_energia 0.7) que o normal (1.0):
+    # é essa diferença que ancora o termo `perfil.mult_energia` na fórmula do custo.
+    custo_extracao, cobrado_agressivo = _custo_de_uma_extracao("agressivo")
+    _, cobrado_normal = _custo_de_uma_extracao("normal")
+
+    assert cobrado_agressivo == pytest.approx(custo_extracao * 10.0 * 0.2 * 0.7)
+    assert cobrado_agressivo == pytest.approx(cobrado_normal * 0.7)
+
+
+def test_custo_energetico_do_modo_cuidadoso_e_o_mais_caro():
+    custo_extracao, cobrado = _custo_de_uma_extracao("cuidadoso")
+
+    assert cobrado == pytest.approx(custo_extracao * 10.0 * 0.2 * 1.6)
 
 
 def test_modo_invalido_retorna_422():
