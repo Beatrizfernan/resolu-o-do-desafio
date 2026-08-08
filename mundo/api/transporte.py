@@ -130,6 +130,16 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
         ciclo_chegada = motor.ciclo_atual + duracao
 
         def concluir() -> None:
+            if unidade.estado != EstadoDoRobo.EXECUTANDO:
+                motor.eventos.publicar(
+                    "viagem_abortada",
+                    motor.ciclo_atual,
+                    {
+                        "unidade": unidade.identificador,
+                        "carga": requisicao.identificador_da_carga,
+                    },
+                )
+                return
             carga_em_transito = motor.cargas[requisicao.identificador_da_carga]
             carga_em_transito.local = LocalDaCarga.EM_ARMAZEM
             carga_em_transito.mult_degradacao_local = 1.0

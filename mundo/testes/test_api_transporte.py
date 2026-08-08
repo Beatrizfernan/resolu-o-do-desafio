@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
 from mundo.dominio.cargas import CargaMineral, LocalDaCarga
+from mundo.dominio.robos import EstadoDoRobo
 from mundo.dominio.rotas import CondicaoDaRota
 
 
@@ -366,6 +367,41 @@ def test_abortar_viagem_de_unidade_inexistente_retorna_404():
             "identificador_da_unidade": "transportadora-x",
         })
         assert resposta.status_code == 404
+
+
+def test_abortar_viagem_meio_do_caminho_impede_entrega_e_publica_evento():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
+
+        # Iniciar viagem
+        id_autorizacao = _autorizar(cliente)
+        _iniciar_viagem(cliente, id_autorizacao)
+        motor.avancar_ciclo(1)
+
+        # Verificar que a carga está em trânsito
+        assert motor.cargas["carga-1"].local == LocalDaCarga.EM_TRANSITO
+        assert motor.robos["transportadora-1"].estado == EstadoDoRobo.EXECUTANDO
+
+        # Abortar a viagem
+        cliente.post("/transporte/abortar-viagem", json={
+            "identificador_da_unidade": "transportadora-1",
+        })
+        motor.avancar_ciclo(1)
+        assert motor.robos["transportadora-1"].estado == EstadoDoRobo.RETORNANDO
+
+        # Avançar até o ciclo original de chegada (ciclo 1 + tempo_base = 6)
+        motor.avancar_ciclo(motor.rotas["rota-1"].tempo_base - 1)
+
+        # A carga não deve ter chegado ao armazém
+        assert motor.cargas["carga-1"].local == LocalDaCarga.EM_TRANSITO
+        assert motor.robos["transportadora-1"].estado == EstadoDoRobo.RETORNANDO
+
+        # Verificar que o evento viagem_abortada foi publicado
+        eventos = motor.eventos.consultar_eventos()
+        assert any(e.tipo == "viagem_abortada" and e.dados["unidade"] == "transportadora-1" for e in eventos)
 
 
 def test_descarregar_publica_carga_disponivel():

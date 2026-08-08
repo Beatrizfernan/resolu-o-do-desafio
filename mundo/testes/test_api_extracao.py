@@ -226,7 +226,73 @@ def test_custo_energetico_do_modo_cuidadoso_e_o_mais_caro():
     assert cobrado == pytest.approx(custo_extracao * 10.0 * 0.2 * 1.8)
 
 
+def _custo_com_jazida_em(fracao_restante):
+    from mundo.api.dependencias import instancia_do_mundo
+
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 300)
+        jazida = motor.jazidas["jazida-1"]
+        jazida.quantidade_disponivel = jazida.quantidade_inicial * fracao_restante
+        antes = motor.energia.consultar_energia("extracao")
+
+        _extrair(cliente, modo="normal")
+        motor.avancar_ciclo(1)
+
+        return antes - motor.energia.consultar_energia("extracao")
+
+
+def test_extrair_de_jazida_esvaziada_custa_mais_que_de_jazida_intacta():
+    # A escassez entra como fracao_restante ** -expoente_escassez (expoente 2.0),
+    # limitada por fator_escassez_maximo: jazida intacta paga ×1, jazida com 25%
+    # restante paga ×(0.25 ** -2) = ×16.
+    custo_intacta = _custo_com_jazida_em(1.0)
+    custo_esvaziada = _custo_com_jazida_em(0.25)
+
+    assert custo_esvaziada > custo_intacta
+    assert custo_esvaziada == pytest.approx(custo_intacta * 16.0)
+
+
 def test_modo_invalido_retorna_422():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         assert _extrair(cliente, modo="turbo").status_code == 422
+
+
+def test_interromper_extracao_impede_criacao_de_carga_e_publica_evento():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 100)
+        jazida_id = "jazida-1"
+        jazida = motor.jazidas[jazida_id]
+        quantidade_inicial = jazida.quantidade_disponivel
+
+        # Iniciar extração
+        _extrair(cliente, identificador_da_jazida=jazida_id, quantidade=10.0)
+        motor.avancar_ciclo(1)
+
+        # Verificar que a unidade está executando
+        assert motor.robos["mineradora-1"].estado == EstadoDoRobo.EXECUTANDO
+        assert len(motor.cargas) == 0
+
+        # Interromper a extração
+        cliente.post("/extracao/interromper-extracao", json={
+            "identificador_da_unidade": "mineradora-1",
+        })
+        motor.avancar_ciclo(1)
+        assert motor.robos["mineradora-1"].estado == EstadoDoRobo.RETORNANDO
+
+        # Avançar até o ciclo original de conclusão (ciclo 1 + 5 = 6)
+        motor.avancar_ciclo(4)
+
+        # Nenhuma carga deve ter sido criada
+        assert len(motor.cargas) == 0
+
+        # A jazida não deve ter sido consumida
+        assert motor.jazidas[jazida_id].quantidade_disponivel == quantidade_inicial
+
+        # Verificar que o evento extracao_interrompida foi publicado
+        eventos = motor.eventos.consultar_eventos()
+        assert any(e.tipo == "extracao_interrompida" and e.dados["unidade"] == "mineradora-1" for e in eventos)

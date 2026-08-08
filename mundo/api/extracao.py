@@ -69,11 +69,15 @@ async def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
             raise ValueError("Jazida não disponível")
         perfil = motor.catalogo_de_modos.obter_extracao(requisicao.modo)
         mineral = motor.catalogo_de_minerais.obter(jazida.mineral)
+        # A escassez da jazida entra como multiplicador: quanto mais esvaziada,
+        # mais cara fica cada unidade seguinte. É o que dá preço ao desperdício,
+        # já que o modo que consome mais da jazida chega antes à faixa cara.
         custo = (
             mineral.custo_extracao
             * requisicao.quantidade
             * motor.catalogo_de_modos.fator_base_de_energia
             * perfil.mult_energia
+            * motor.catalogo_de_modos.fator_de_escassez(jazida.fracao_restante)
         )
         motor.energia.debitar(CENTRAL, custo)
         unidade.estado = EstadoDoRobo.EXECUTANDO
@@ -81,6 +85,16 @@ async def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
         ciclo_conclusao = motor.ciclo_atual + duracao
 
         def concluir() -> None:
+            if unidade.estado != EstadoDoRobo.EXECUTANDO:
+                motor.eventos.publicar(
+                    "extracao_interrompida",
+                    motor.ciclo_atual,
+                    {
+                        "unidade": unidade.identificador,
+                        "jazida": jazida.identificador,
+                    },
+                )
+                return
             consumido = requisicao.quantidade * perfil.fator_desperdicio
             jazida.extrair(consumido)
             unidade.estado = EstadoDoRobo.AGUARDANDO
