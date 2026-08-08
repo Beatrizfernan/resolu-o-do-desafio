@@ -25,6 +25,21 @@ def test_carga_em_armazem_degrada_conforme_sensibilidade_de_armazenagem():
     assert motor.cargas["c1"].qualidade == esperado
 
 
+def test_carga_em_jazida_degrada_com_o_multiplicador_configurado_do_local():
+    motor = _criar_motor()
+    motor.cargas["c1"] = CargaMineral(
+        "c1", "gelo_de_agua", 10.0, 100.0, local=LocalDaCarga.EM_JAZIDA,
+    )
+    mineral = motor.catalogo_de_minerais.obter("gelo_de_agua")
+    # 2.0 é o multiplicador de "em_jazida" em config/modos.json, fixado aqui de propósito:
+    # mudar aquele valor deve quebrar este teste em vez de passar despercebido.
+    esperado = 100.0 - mineral.taxa_degradacao * 1.0 * 2.0
+
+    motor.avancar_ciclo(1)
+
+    assert motor.cargas["c1"].qualidade == esperado
+
+
 def test_carga_exposta_na_jazida_degrada_mais_que_em_armazem():
     motor = _criar_motor()
     motor.cargas["exposta"] = CargaMineral(

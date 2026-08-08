@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
-from mundo.dominio.cargas import CargaMineral
+from mundo.dominio.cargas import CargaMineral, LocalDaCarga
 from mundo.dominio.rotas import CondicaoDaRota
 
 
@@ -235,7 +235,9 @@ def test_viagem_conclui_apos_o_tempo_base_degradando_a_carga():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral(
+            "carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.EM_JAZIDA,
+        )
 
         _iniciar_viagem(cliente, _autorizar(cliente))
         motor.avancar_ciclo(1)
@@ -245,18 +247,12 @@ def test_viagem_conclui_apos_o_tempo_base_degradando_a_carga():
 
         assert "transporte_concluido" in _tipos_de_eventos(motor)
         assert motor.robos["transportadora-1"].estado.value == "retornando"
-        # Além do risco da rota, a carga sofre a degradação por ciclo em cada um dos
-        # 1 + tempo_base ciclos avançados acima.
+        # A carga permanece em jazida durante toda a viagem (nada move o local ainda);
+        # hematita em jazida perde 0.2 × 1.0 × 2.0 = 0.4 por ciclo, em 1 + tempo_base = 6
+        # ciclos, mais o risco 0.05 da rota: 90.0 - 0.05 - 2.4 = 87.55.
         carga = motor.cargas["carga-1"]
-        mineral = motor.catalogo_de_minerais.obter(carga.mineral)
-        perda_por_ciclo = (
-            mineral.taxa_degradacao
-            * carga.sensibilidade_aplicavel(mineral)
-            * motor.catalogo_de_modos.mult_do_local(carga.local.value)
-        )
-        ciclos = 1 + motor.rotas["rota-1"].tempo_base
-        esperado = 90.0 - motor.rotas["rota-1"].risco - perda_por_ciclo * ciclos
-        assert carga.qualidade == pytest.approx(esperado)
+        assert carga.local == LocalDaCarga.EM_JAZIDA
+        assert carga.qualidade == pytest.approx(87.55)
 
 
 def test_abortar_viagem_coloca_a_unidade_em_retornando():

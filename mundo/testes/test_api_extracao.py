@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
+from mundo.dominio.cargas import LocalDaCarga
 from mundo.dominio.robos import EstadoDoRobo
 
 
@@ -62,13 +63,9 @@ def test_extracao_concluida_cria_carga_que_ja_degrada_no_ciclo_de_criacao():
         assert carga.mineral == jazida["mineral"]
         assert carga.quantidade == 10.0
         # A carga nasce com qualidade máxima e sofre a degradação do ciclo em que foi criada.
-        mineral = motor.catalogo_de_minerais.obter(carga.mineral)
-        perda = (
-            mineral.taxa_degradacao
-            * carga.sensibilidade_aplicavel(mineral)
-            * motor.catalogo_de_modos.mult_do_local(carga.local.value)
-        )
-        assert carga.qualidade == 100.0 - perda
+        # Hematita em jazida: taxa 0.2 × sensibilidade 1.0 × mult. do local 2.0 = 0.4 por ciclo.
+        assert carga.local == LocalDaCarga.EM_JAZIDA
+        assert carga.qualidade == 99.6
 
 
 def test_interromper_extracao_muda_estado_para_retornando():
