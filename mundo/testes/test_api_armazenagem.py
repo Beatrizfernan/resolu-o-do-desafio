@@ -194,3 +194,15 @@ def test_solicitar_transporte_rejeita_autorizacao_inexistente():
         tipos = _tipos_de_eventos(motor)
         assert "carga_disponivel" not in tipos
         assert "operacao_invalida" in tipos
+
+
+def test_receber_carga_move_a_carga_para_o_armazem():
+    from mundo.dominio.cargas import LocalDaCarga
+
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        _receber_carga(cliente)
+        motor.avancar_ciclo(1)
+
+        assert motor.cargas["carga-1"].local == LocalDaCarga.EM_ARMAZEM

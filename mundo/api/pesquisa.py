@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from mundo.dominio.cargas import LocalDaCarga
 from mundo.motor.comandos import Comando
 
 from .dependencias import obter_motor
@@ -101,6 +102,7 @@ async def preparar_distribuicao(requisicao: RequisicaoDeDistribuicao) -> dict:
         mineral = motor.catalogo_de_minerais.obter(carga.mineral)
         valor_entregue = carga.valor_efetivo(mineral.valor_por_unidade)
         motor.faturamento_total += valor_entregue
+        carga.local = LocalDaCarga.ENTREGUE
         motor.eventos.publicar("carga_entregue", motor.ciclo_atual, {
             "carga": carga.identificador, "valor_entregue": valor_entregue,
         })

@@ -306,3 +306,24 @@ def test_preparar_distribuicao_de_carga_inexistente_nao_fatura():
 
         assert "operacao_invalida" in _tipos_de_eventos(motor)
         assert motor.faturamento_total == 0.0
+
+
+def test_preparar_distribuicao_marca_a_carga_como_entregue_antes_de_remove_la():
+    from mundo.dominio.cargas import LocalDaCarga
+
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0)
+        locais_publicados = []
+        motor.eventos.assinar(
+            lambda evento: locais_publicados.append(motor.cargas["carga-1"].local)
+            if evento.tipo == "carga_entregue"
+            else None,
+        )
+
+        _preparar_distribuicao(cliente, id_autorizacao=_autorizar(cliente))
+        motor.avancar_ciclo(1)
+
+        assert locais_publicados == [LocalDaCarga.ENTREGUE]
+        assert "carga-1" not in motor.cargas
