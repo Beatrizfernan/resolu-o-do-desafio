@@ -11,9 +11,9 @@
     "agressivo": {"mult_energia": 0.45, "mult_duracao": 0.6, "qualidade_inicial": 78.0, "fator_desperdicio": 1.4}
   },
   "transporte": {
-    "economico": {"mult_energia": 0.85, "mult_duracao": 2.0, "mult_degradacao": 2.5},
+    "economico": {"mult_energia": 0.9, "mult_duracao": 1.4, "mult_degradacao": 18.0},
     "normal": {"mult_energia": 1.0, "mult_duracao": 1.0, "mult_degradacao": 1.0},
-    "rapido": {"mult_energia": 1.05, "mult_duracao": 0.5, "mult_degradacao": 0.5}
+    "rapido": {"mult_energia": 1.05, "mult_duracao": 0.6, "mult_degradacao": 0.5}
   },
   "multiplicador_por_local": {
     "em_jazida": 2.0,
