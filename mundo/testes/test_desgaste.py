@@ -222,12 +222,41 @@ def test_agressivo_deixa_de_dominar_sob_operacao_continua():
     )
 
 
-def test_normal_tambem_acumula_desgaste_e_nao_tem_refugio():
+# Margem acima da qual um modo deixa de estar empatado e passa a ser a escolha
+# padrão. 5% é a ordem de grandeza do próprio ruído do simulador — durações
+# arredondadas para ciclos inteiros e degraus do fator de escassez movem os
+# custos nessa faixa —, então uma diferença menor que isso não é vantagem
+# estratégica estável. Acima dela, um operador racional escolheria sempre o
+# mesmo modo e a decisão "qual modo usar" deixa de existir. Modos *próximos*
+# são o resultado saudável: a decisão real vira quando pausar, não qual modo.
+MARGEM_DE_DOMINANCIA = 0.05
+
+
+def test_nenhum_modo_e_universalmente_mais_barato_sob_operacao_continua():
     """Impede a dominância invertida.
 
-    Se o desgaste punisse só os extremos, `normal` viraria a escolha
-    universal — o mesmo defeito com outro nome.
+    O sub-projeto existe para eliminar um modo universalmente melhor. Punir só
+    os extremos apenas trocaria `agressivo` por `normal` como escolha única —
+    o mesmo defeito com outro nome. Sob uso contínuo os três precisam ficar
+    competitivos entre si.
     """
+    custos = {}
+    for modo in ("cuidadoso", "normal", "agressivo"):
+        entregue, energia = _operar_continuamente(modo)
+        custos[modo] = energia / entregue
+
+    ordenados = sorted(custos.items(), key=lambda item: item[1])
+    (modo_barato, custo_barato), (_, custo_seguinte) = ordenados[0], ordenados[1]
+    vantagem = (custo_seguinte - custo_barato) / custo_seguinte
+
+    assert vantagem <= MARGEM_DE_DOMINANCIA, (
+        f"'{modo_barato}' é universalmente mais barato por {vantagem:.1%}: "
+        + ", ".join(f"{nome}={custo:.3f}" for nome, custo in ordenados)
+    )
+
+
+def test_normal_tambem_acumula_desgaste():
+    """Nenhum modo é isento: operar em ritmo intermediário também castiga."""
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()

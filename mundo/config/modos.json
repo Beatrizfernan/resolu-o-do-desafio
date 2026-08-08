@@ -1,8 +1,8 @@
 {
   "fator_base_de_energia": 0.2,
-  "taxa_de_desgaste": 0.7,
-  "recuperacao_de_desgaste_por_ciclo": 0.45,
-  "sensibilidade_ao_desgaste": 0.6,
+  "taxa_de_desgaste": 1.0,
+  "recuperacao_de_desgaste_por_ciclo": 0.15,
+  "sensibilidade_ao_desgaste": 0.65,
   "fator_escassez_maximo": 100.0,
   "expoente_escassez": 2.0,
   "extracao": {
