@@ -64,3 +64,24 @@ def test_sensibilidade_aplicavel_em_transito():
 def test_sensibilidade_aplicavel_exposta_na_jazida_e_total():
     carga = CargaMineral("c1", "gelo_de_agua", 10.0, local=LocalDaCarga.EM_JAZIDA)
     assert carga.sensibilidade_aplicavel(_mineral("gelo_de_agua")) == 1.0
+
+
+def test_mover_para_troca_local_e_multiplicador_juntos():
+    carga = CargaMineral("c1", "gelo_de_agua", 10.0, local=LocalDaCarga.EM_JAZIDA)
+
+    carga.mover_para(LocalDaCarga.EM_TRANSITO, 2.5)
+
+    assert carga.local == LocalDaCarga.EM_TRANSITO
+    assert carga.mult_degradacao_local == 2.5
+
+
+def test_mover_para_sem_multiplicador_devolve_a_degradacao_ao_neutro():
+    carga = CargaMineral(
+        "c1", "gelo_de_agua", 10.0,
+        local=LocalDaCarga.EM_TRANSITO, mult_degradacao_local=0.5,
+    )
+
+    carga.mover_para(LocalDaCarga.EM_ARMAZEM)
+
+    assert carga.local == LocalDaCarga.EM_ARMAZEM
+    assert carga.mult_degradacao_local == 1.0

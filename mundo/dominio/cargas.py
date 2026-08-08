@@ -29,6 +29,17 @@ class CargaMineral:
     def __post_init__(self) -> None:
         self.qualidade = clamp_qualidade(self.qualidade)
 
+    def mover_para(self, local: LocalDaCarga, mult_degradacao_local: float = 1.0) -> None:
+        """Troca o local e o multiplicador de degradação juntos.
+
+        Os dois campos são um par: um multiplicador nasce de um contexto (o modo
+        da viagem, por exemplo) e deixa de valer quando a carga sai dele. Escrever
+        um sem o outro deixa o modificador colado num local onde ele não se aplica
+        mais, e a carga passa a degradar mais rápido ou mais devagar para sempre.
+        """
+        self.local = local
+        self.mult_degradacao_local = mult_degradacao_local
+
     def degradar(self, taxa_degradacao: float, fator_contexto: float = 1.0) -> None:
         perda = taxa_degradacao * fator_contexto
         self.qualidade = clamp_qualidade(self.qualidade - perda)

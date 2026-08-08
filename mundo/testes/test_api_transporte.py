@@ -395,8 +395,9 @@ def test_abortar_viagem_meio_do_caminho_impede_entrega_e_publica_evento():
         # Avançar até o ciclo original de chegada (ciclo 1 + tempo_base = 6)
         motor.avancar_ciclo(motor.rotas["rota-1"].tempo_base - 1)
 
-        # A carga não deve ter chegado ao armazém
-        assert motor.cargas["carga-1"].local == LocalDaCarga.EM_TRANSITO
+        # A carga não deve ter chegado ao armazém: volta para o local de origem,
+        # em vez de ficar presa em trânsito degradando até zero.
+        assert motor.cargas["carga-1"].local == LocalDaCarga.EM_JAZIDA
         assert motor.robos["transportadora-1"].estado == EstadoDoRobo.RETORNANDO
 
         # Verificar que o evento viagem_abortada foi publicado
@@ -437,3 +438,63 @@ def test_retornar_unidade_inexistente_retorna_404():
             "identificador_da_unidade": "transportadora-x",
         })
         assert resposta.status_code == 404
+
+
+def test_abortar_viagem_devolve_a_carga_ao_local_de_origem_com_degradacao_neutra():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.cargas["carga-1"] = CargaMineral(
+            "carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.EM_ARMAZEM,
+        )
+        motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
+
+        _iniciar_viagem(cliente, _autorizar(cliente), modo="rapido")
+        motor.avancar_ciclo(1)
+        assert motor.cargas["carga-1"].mult_degradacao_local == 0.5
+
+        cliente.post("/transporte/abortar-viagem", json={
+            "identificador_da_unidade": "transportadora-1",
+        })
+        motor.avancar_ciclo(motor.rotas["rota-1"].tempo_base)
+
+        # O aborto desfaz a partida por inteiro: a carga volta de onde saiu e o
+        # multiplicador do modo não sobrevive à viagem que não aconteceu.
+        assert "viagem_abortada" in _tipos_de_eventos(motor)
+        assert motor.cargas["carga-1"].local == LocalDaCarga.EM_ARMAZEM
+        assert motor.cargas["carga-1"].mult_degradacao_local == 1.0
+
+
+def test_viagem_abortada_e_recebida_no_armazem_nao_reduz_a_degradacao_futura():
+    from mundo.api.dependencias import instancia_do_mundo as mundo
+
+    perdas = {}
+    for abortar in (False, True):
+        app = criar_app(com_loop_real_time=False)
+        with TestClient(app) as cliente:
+            motor = mundo.obter_motor()
+            motor.cargas["carga-1"] = CargaMineral("carga-1", "gelo_de_agua", 10.0, 100.0)
+            motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
+            motor.energia.alocar_energia("reserva_estrategica", "armazenagem", 100)
+
+            _iniciar_viagem(cliente, _autorizar(cliente), modo="rapido")
+            motor.avancar_ciclo(1)
+            if abortar:
+                cliente.post("/transporte/abortar-viagem", json={
+                    "identificador_da_unidade": "transportadora-1",
+                })
+            motor.avancar_ciclo(motor.rotas["rota-1"].tempo_base)
+            cliente.post("/armazenagem/receber-carga", json={
+                "identificador_do_armazem": "armazem-1",
+                "identificador_da_carga": "carga-1",
+            })
+            motor.avancar_ciclo(1)
+            # Só a perda dentro do armazém interessa aqui: o caminho até lá é
+            # diferente nos dois cenários e degrada de forma legitimamente distinta.
+            ao_guardar = motor.cargas["carga-1"].qualidade
+            motor.avancar_ciclo(20)
+            perdas[abortar] = ao_guardar - motor.cargas["carga-1"].qualidade
+
+    # Abortar uma viagem `rapido` não pode ser um atalho para degradar menos no
+    # armazém: o multiplicador do modo morre com a viagem.
+    assert perdas[True] == pytest.approx(perdas[False])

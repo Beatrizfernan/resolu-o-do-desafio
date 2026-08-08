@@ -132,13 +132,19 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
         unidade.viagens_disponiveis -= 1
         unidade.estado = EstadoDoRobo.EXECUTANDO
         carga = motor.cargas[requisicao.identificador_da_carga]
-        carga.local = LocalDaCarga.EM_TRANSITO
-        carga.mult_degradacao_local = perfil.mult_degradacao
+        local_de_origem = carga.local
+        carga.mover_para(LocalDaCarga.EM_TRANSITO, perfil.mult_degradacao)
         duracao = max(1, round(rota.tempo_base * perfil.mult_duracao))
         ciclo_chegada = motor.ciclo_atual + duracao
 
         def concluir() -> None:
             if unidade.estado != EstadoDoRobo.EXECUTANDO:
+                # A viagem não aconteceu: a carga volta para onde saiu, sem o
+                # multiplicador do modo. Deixá-la em trânsito a condenaria a
+                # degradar até zero sem nenhum caminho de recuperação.
+                carga_abortada = motor.cargas.get(requisicao.identificador_da_carga)
+                if carga_abortada is not None:
+                    carga_abortada.mover_para(local_de_origem)
                 motor.eventos.publicar(
                     "viagem_abortada",
                     motor.ciclo_atual,
@@ -149,8 +155,7 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
                 )
                 return
             carga_em_transito = motor.cargas[requisicao.identificador_da_carga]
-            carga_em_transito.local = LocalDaCarga.EM_ARMAZEM
-            carga_em_transito.mult_degradacao_local = 1.0
+            carga_em_transito.mover_para(LocalDaCarga.EM_ARMAZEM)
             unidade.estado = EstadoDoRobo.RETORNANDO
             motor.eventos.publicar(
                 "transporte_concluido",
