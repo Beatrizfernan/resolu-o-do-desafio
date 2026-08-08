@@ -45,8 +45,31 @@ def test_comando_que_lanca_erro_publica_evento_operacao_invalida():
     motor.enfileirar_comando(Comando("iniciar_extracao", "extracao", {}, falhar))
     motor.avancar_ciclo(1)
 
-    eventos = motor.eventos.consultar_eventos()
-    assert any(e.tipo == "operacao_invalida" for e in eventos)
+    eventos = [e for e in motor.eventos.consultar_eventos() if e.tipo == "operacao_invalida"]
+    assert len(eventos) == 1
+    assert set(eventos[0].dados) == {"comando", "central", "motivo"}
+    assert eventos[0].dados["comando"] == "iniciar_extracao"
+    assert eventos[0].dados["central"] == "extracao"
+    assert "saldo insuficiente" in eventos[0].dados["motivo"]
+
+
+def test_comando_com_erro_nao_interrompe_resto_do_ciclo():
+    motor = _criar_motor()
+    observado: list[str] = []
+
+    def falhar():
+        raise ValueError("saldo insuficiente")
+
+    motor.enfileirar_comando(Comando("iniciar_extracao", "extracao", {}, falhar))
+    motor.enfileirar_comando(
+        Comando("registrar", "armazenagem", {}, lambda: observado.append("comando-seguinte")),
+    )
+    motor.agendar_efeito(motor.ciclo_atual + 1, lambda: observado.append("efeito-agendado"))
+
+    motor.avancar_ciclo(1)
+
+    assert observado == ["comando-seguinte", "efeito-agendado"]
+    assert any(e.tipo == "operacao_invalida" for e in motor.eventos.consultar_eventos())
 
 
 def test_efeito_agendado_dispara_no_ciclo_alvo():
