@@ -120,7 +120,13 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
         if unidade.viagens_disponiveis <= 0:
             raise ValueError("Sem viagens disponíveis")
         perfil = motor.catalogo_de_modos.obter_transporte(requisicao.modo)
-        motor.energia.debitar(CENTRAL, CUSTO_ENERGETICO_VIAGEM * perfil.mult_energia)
+        custo = (
+            CUSTO_ENERGETICO_VIAGEM
+            * perfil.mult_energia
+            * motor.catalogo_de_modos.fator_de_desgaste(unidade.desgaste)
+        )
+        motor.energia.debitar(CENTRAL, custo)
+        unidade.desgaste += custo * motor.catalogo_de_modos.taxa_de_desgaste
         unidade.viagens_disponiveis -= 1
         unidade.estado = EstadoDoRobo.EXECUTANDO
         carga = motor.cargas[requisicao.identificador_da_carga]
@@ -151,6 +157,7 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
                     "unidade": unidade.identificador,
                     "carga": carga_em_transito.identificador,
                     "modo": requisicao.modo.value,
+                    "desgaste_da_unidade": unidade.desgaste,
                 },
             )
 

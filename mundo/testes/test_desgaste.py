@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
+from mundo.dominio.cargas import CargaMineral
 from mundo.dominio.minerais import CatalogoDeMinerais
 from mundo.dominio.robos import EstadoDoRobo
 from mundo.motor.motor_de_simulacao import ConfiguracaoDaSimulacao, MotorDeSimulacao
@@ -105,3 +106,63 @@ def test_unidade_desgastada_paga_mais_pela_mesma_extracao():
             custos[desgaste_inicial] = antes - motor.energia.consultar_energia("extracao")
 
     assert custos[4.0] > custos[0.0]
+
+
+def _autorizar(cliente) -> str:
+    resposta = cliente.post(
+        "/missao/autorizar-missao",
+        json={"operacao": "iniciar_viagem", "central_solicitante": "transporte"},
+    )
+    return resposta.json()["id_autorizacao"]
+
+
+def test_transportadora_desgastada_paga_mais_pela_mesma_viagem():
+    custos = {}
+    for desgaste_inicial in (0.0, 4.0):
+        app = criar_app(com_loop_real_time=False)
+        with TestClient(app) as cliente:
+            motor = instancia_do_mundo.obter_motor()
+            motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+            motor.energia.alocar_energia("reserva_estrategica", "transporte", 500)
+            motor.robos["transportadora-1"].desgaste = desgaste_inicial
+            antes = motor.energia.consultar_energia("transporte")
+
+            cliente.post(
+                "/transporte/iniciar-viagem",
+                json={
+                    "identificador_da_unidade": "transportadora-1",
+                    "identificador_da_rota": "rota-1",
+                    "identificador_da_carga": "carga-1",
+                    "id_autorizacao": _autorizar(cliente),
+                },
+            )
+            motor.avancar_ciclo(1)
+
+            custos[desgaste_inicial] = antes - motor.energia.consultar_energia("transporte")
+
+    assert custos[4.0] > custos[0.0]
+
+
+def test_viagem_acumula_desgaste_na_transportadora():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.energia.alocar_energia("reserva_estrategica", "transporte", 500)
+        unidade = motor.robos["transportadora-1"]
+        antes = motor.energia.consultar_energia("transporte")
+
+        cliente.post(
+            "/transporte/iniciar-viagem",
+            json={
+                "identificador_da_unidade": "transportadora-1",
+                "identificador_da_rota": "rota-1",
+                "identificador_da_carga": "carga-1",
+                "id_autorizacao": _autorizar(cliente),
+            },
+        )
+        motor.avancar_ciclo(1)
+
+        energia_gasta = antes - motor.energia.consultar_energia("transporte")
+        esperado = energia_gasta * motor.catalogo_de_modos.taxa_de_desgaste
+        assert unidade.desgaste == pytest.approx(esperado)
