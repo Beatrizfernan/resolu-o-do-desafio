@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -26,15 +27,23 @@ async def _loop_real_time() -> None:
 async def ciclo_de_vida(app: FastAPI):
     catalogo = CatalogoDeMinerais.carregar_de_arquivo(CAMINHO_CATALOGO_PADRAO)
     instancia_do_mundo.inicializar(ConfiguracaoDaSimulacao(semente=0, duracao_maxima=5000), catalogo)
+    if not app.state.com_loop_real_time:
+        yield
+        return
     tarefa = asyncio.create_task(_loop_real_time())
-    yield
-    tarefa.cancel()
+    try:
+        yield
+    finally:
+        tarefa.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await tarefa
 
 
-def criar_app() -> FastAPI:
+def criar_app(*, com_loop_real_time: bool = True) -> FastAPI:
     from . import missao
 
     app = FastAPI(title="Mundo — Operação Marciana", lifespan=ciclo_de_vida)
+    app.state.com_loop_real_time = com_loop_real_time
     app.include_router(missao.router)
     return app
 
