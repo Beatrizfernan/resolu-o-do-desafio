@@ -1,9 +1,9 @@
 {
   "fator_base_de_energia": 0.2,
   "extracao": {
-    "cuidadoso": {"mult_energia": 1.6, "mult_duracao": 1.4, "qualidade_inicial": 100.0, "fator_desperdicio": 1.0},
-    "normal": {"mult_energia": 1.0, "mult_duracao": 1.0, "qualidade_inicial": 92.0, "fator_desperdicio": 1.15},
-    "agressivo": {"mult_energia": 0.7, "mult_duracao": 0.6, "qualidade_inicial": 78.0, "fator_desperdicio": 1.4}
+    "cuidadoso": {"mult_energia": 1.8, "mult_duracao": 1.4, "qualidade_inicial": 100.0, "fator_desperdicio": 1.0},
+    "normal": {"mult_energia": 1.0, "mult_duracao": 1.0, "qualidade_inicial": 92.0, "fator_desperdicio": 1.2},
+    "agressivo": {"mult_energia": 0.45, "mult_duracao": 0.6, "qualidade_inicial": 78.0, "fator_desperdicio": 1.4}
   },
   "transporte": {
     "economico": {"mult_energia": 0.85, "mult_duracao": 2.0, "mult_degradacao": 2.5},

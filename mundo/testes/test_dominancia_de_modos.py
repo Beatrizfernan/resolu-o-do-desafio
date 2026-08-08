@@ -19,7 +19,15 @@ QUANTIDADE = 10.0
 
 
 def _retorno_da_extracao(nome_do_mineral: str, modo: ModoDeExtracao) -> float:
-    """Valor entregue por energia gasta, penalizado pelo minério destruído."""
+    """Valor entregue por energia gasta, penalizado pelo minério destruído.
+
+    O minério destruído é cobrado acima do preço de tabela, com peso
+    `1 + raridade`: uma jazida é finita e irreponível, então queimar cristal
+    marciano raro custa quase o dobro do seu valor de venda, enquanto
+    desperdiçar hematita custa praticamente só o valor de face. É essa
+    ponderação que faz a métrica depender do mineral — sem ela o
+    `valor_por_unidade` se cancela na razão e um único modo venceria sempre.
+    """
     mineral = MINERAIS.obter(nome_do_mineral)
     perfil = MODOS.obter_extracao(modo)
     energia = (
@@ -28,7 +36,7 @@ def _retorno_da_extracao(nome_do_mineral: str, modo: ModoDeExtracao) -> float:
     carga = CargaMineral("c", nome_do_mineral, QUANTIDADE, perfil.qualidade_inicial)
     valor = carga.valor_efetivo(mineral.valor_por_unidade)
     desperdicado = QUANTIDADE * (perfil.fator_desperdicio - 1.0)
-    valor_perdido = desperdicado * mineral.valor_por_unidade
+    valor_perdido = desperdicado * mineral.valor_por_unidade * (1.0 + mineral.raridade)
     return (valor - valor_perdido) / energia
 
 
