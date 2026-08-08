@@ -38,6 +38,32 @@ def test_iniciar_extracao_e_aceita_e_processada_no_proximo_ciclo():
         assert motor.robos["mineradora-1"].estado.value == "aguardando"
 
 
+def test_extracao_concluida_cria_carga_com_qualidade_maxima():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        jazidas = cliente.get("/extracao/jazidas").json()
+        jazida = jazidas[0]
+
+        cliente.post(
+            "/extracao/iniciar-extracao",
+            json={
+                "identificador_da_unidade": "mineradora-1",
+                "identificador_da_jazida": jazida["identificador"],
+                "quantidade": 10.0,
+            },
+        )
+
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 20)
+        motor.avancar_ciclo(6)
+
+        assert len(motor.cargas) == 1
+        carga = next(iter(motor.cargas.values()))
+        assert carga.mineral == jazida["mineral"]
+        assert carga.quantidade == 10.0
+        assert carga.qualidade == 100.0
+
+
 def test_interromper_extracao_muda_estado_para_retornando():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:

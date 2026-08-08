@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from mundo.dominio.cargas import CargaMineral
 from mundo.dominio.jazidas import EstadoDaJazida
 from mundo.dominio.robos import EstadoDoRobo
 from mundo.motor.comandos import Comando
@@ -13,6 +14,7 @@ router = APIRouter(prefix="/extracao", tags=["extracao"])
 CENTRAL = "extracao"
 DURACAO_EXTRACAO_EM_CICLOS = 5
 CUSTO_ENERGETICO_EXTRACAO = 2
+QUALIDADE_INICIAL_DA_CARGA = 100.0
 
 
 @router.get("/jazidas")
@@ -72,6 +74,13 @@ def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
         def concluir() -> None:
             jazida.extrair(requisicao.quantidade)
             unidade.estado = EstadoDoRobo.AGUARDANDO
+            carga = CargaMineral(
+                f"carga-{jazida.identificador}-{unidade.identificador}-{motor.ciclo_atual}",
+                jazida.mineral,
+                requisicao.quantidade,
+                QUALIDADE_INICIAL_DA_CARGA,
+            )
+            motor.cargas[carga.identificador] = carga
             motor.eventos.publicar(
                 "extracao_concluida",
                 motor.ciclo_atual,
@@ -79,6 +88,7 @@ def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
                     "unidade": unidade.identificador,
                     "jazida": jazida.identificador,
                     "quantidade": requisicao.quantidade,
+                    "carga": carga.identificador,
                 },
             )
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from mundo.dominio.cargas import CargaMineral
 from mundo.motor.comandos import Comando
 
 from .dependencias import obter_motor
@@ -52,9 +51,6 @@ def reservar_espaco(requisicao: RequisicaoDeReserva) -> dict:
 class RequisicaoDeRecebimento(BaseModel):
     identificador_do_armazem: str
     identificador_da_carga: str
-    mineral: str
-    quantidade: float
-    qualidade: float
 
 
 @router.post("/receber-carga")
@@ -63,23 +59,20 @@ def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
     armazem = motor.armazens.get(requisicao.identificador_do_armazem)
     if armazem is None:
         raise HTTPException(status_code=404, detail="Armazém não encontrado")
+    carga = motor.cargas.get(requisicao.identificador_da_carga)
+    if carga is None:
+        raise HTTPException(status_code=404, detail="Carga não encontrada")
 
     def executar() -> None:
-        if not armazem.compativel_com(requisicao.mineral):
+        if not armazem.compativel_com(carga.mineral):
             motor.eventos.publicar(
                 "carga_contaminada",
                 motor.ciclo_atual,
-                {"carga": requisicao.identificador_da_carga, "armazem": armazem.identificador},
+                {"carga": carga.identificador, "armazem": armazem.identificador},
             )
             raise ValueError("Mineral incompatível com o armazém")
         motor.energia.debitar(CENTRAL, CUSTO_ENERGETICO_OPERACAO)
-        armazem.reservar_espaco(requisicao.quantidade)
-        motor.cargas[requisicao.identificador_da_carga] = CargaMineral(
-            requisicao.identificador_da_carga,
-            requisicao.mineral,
-            requisicao.quantidade,
-            requisicao.qualidade,
-        )
+        armazem.reservar_espaco(carga.quantidade)
         if armazem.ocupacao >= armazem.capacidade:
             motor.eventos.publicar(
                 "armazem_lotado", motor.ciclo_atual, {"armazem": armazem.identificador},

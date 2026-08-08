@@ -2,18 +2,25 @@ from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
+from mundo.dominio.cargas import CargaMineral
 
 
-def _receber_carga(cliente, **campos) -> None:
-    corpo = {
-        "identificador_do_armazem": "armazem-1",
-        "identificador_da_carga": "carga-1",
-        "mineral": "hematita",
-        "quantidade": 20.0,
-        "qualidade": 90.0,
-    }
-    corpo.update(campos)
-    cliente.post("/armazenagem/receber-carga", json=corpo)
+def _receber_carga(
+    cliente,
+    identificador_da_carga: str = "carga-1",
+    mineral: str = "hematita",
+    quantidade: float = 20.0,
+    qualidade: float = 90.0,
+    identificador_do_armazem: str = "armazem-1",
+):
+    motor = instancia_do_mundo.obter_motor()
+    motor.cargas[identificador_da_carga] = CargaMineral(
+        identificador_da_carga, mineral, quantidade, qualidade,
+    )
+    return cliente.post("/armazenagem/receber-carga", json={
+        "identificador_do_armazem": identificador_do_armazem,
+        "identificador_da_carga": identificador_da_carga,
+    })
 
 
 def _tipos_de_eventos(motor) -> list[str]:
@@ -48,7 +55,19 @@ def test_receber_carga_com_mineral_incompativel_publica_carga_contaminada():
 
         assert "carga_contaminada" in _tipos_de_eventos(motor)
         assert motor.armazens["armazem-1"].ocupacao == 0.0
-        assert "carga-suja" not in motor.cargas
+
+
+def test_receber_carga_inexistente_retorna_404_e_nao_ocupa_espaco():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        resposta = cliente.post("/armazenagem/receber-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificador_da_carga": "carga-fantasma",
+        })
+        assert resposta.status_code == 404
+        motor = instancia_do_mundo.obter_motor()
+        motor.avancar_ciclo(1)
+        assert motor.armazens["armazem-1"].ocupacao == 0.0
 
 
 def test_receber_carga_publica_armazem_proximo_da_capacidade():
