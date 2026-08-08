@@ -40,13 +40,14 @@ async def ciclo_de_vida(app: FastAPI):
 
 
 def criar_app(*, com_loop_real_time: bool = True) -> FastAPI:
-    from . import armazenagem, extracao, missao
+    from . import armazenagem, extracao, missao, transporte
 
     app = FastAPI(title="Mundo — Operação Marciana", lifespan=ciclo_de_vida)
     app.state.com_loop_real_time = com_loop_real_time
     app.include_router(missao.router)
     app.include_router(extracao.router)
     app.include_router(armazenagem.router)
+    app.include_router(transporte.router)
     return app
 
 
