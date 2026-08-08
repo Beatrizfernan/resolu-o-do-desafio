@@ -77,3 +77,27 @@ Valor inteiro (`semente`) que inicializa o gerador de números aleatórios (`ran
 ## Faturamento
 
 Soma dos valores efetivos de todas as cargas que passaram por `preparar_distribuicao` com sucesso (`motor.faturamento_total`).
+
+## Modo de Operação
+
+Parâmetro opcional de uma ação que escolhe um ponto no trade-off entre energia, tempo, qualidade e desperdício. Extração aceita `cuidadoso`, `normal` e `agressivo`; transporte aceita `economico`, `normal` e `rapido`. O default é sempre `normal`. Nenhum modo é globalmente superior: cada um vence em algum cenário, e a suíte de dominância existe para garantir isso.
+
+## Perfil de Modo
+
+Conjunto de multiplicadores que define um modo, carregado de `mundo/config/modos.json`. Multiplicam os valores base da ação — nunca os substituem — para que modificadores futuros possam compor sobre eles.
+
+## Desperdício
+
+Minério consumido da jazida além do que a carga recebe. Extração agressiva debita `quantidade × fator_desperdicio` da jazida e entrega apenas `quantidade`. A diferença some do mundo permanentemente: é o custo global de uma otimização local. A penalidade estratégica é ponderada pela raridade do mineral — uma jazida finita é irreponível — fazendo a destruição de um mineral raro custar quase o dobro do valor tabelado, enquanto desperdiçar um mineral abundante custa praticamente só o valor de face. Por isso extração cuidadosa vence em minerais raros e agressiva em abundantes.
+
+## Local da Carga
+
+Onde a carga está: `em_jazida` (exposta, sem proteção), `em_armazem`, `em_transito` ou `entregue`. Determina qual sensibilidade do mineral governa a degradação e qual multiplicador de contexto se aplica.
+
+## Degradação por Ciclo
+
+Perda de qualidade aplicada a toda carga a cada ciclo:
+
+`taxa_degradacao do mineral × sensibilidade do local × multiplicador do local × multiplicador de contexto`
+
+Minerais estáveis como a hematita quase não perdem qualidade parados; o gelo de água perde rápido. Urgência é propriedade do mineral, não regra especial.
