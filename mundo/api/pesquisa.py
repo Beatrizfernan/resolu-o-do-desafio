@@ -104,6 +104,7 @@ async def preparar_distribuicao(requisicao: RequisicaoDeDistribuicao) -> dict:
         motor.eventos.publicar("carga_entregue", motor.ciclo_atual, {
             "carga": carga.identificador, "valor_entregue": valor_entregue,
         })
+        del motor.cargas[requisicao.identificador_da_carga]
 
     motor.enfileirar_comando(
         Comando("preparar_distribuicao", CENTRAL, requisicao.model_dump(), executar),

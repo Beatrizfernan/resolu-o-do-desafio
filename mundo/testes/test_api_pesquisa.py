@@ -252,6 +252,24 @@ def test_preparar_distribuicao_rejeita_reuso_da_mesma_autorizacao():
         assert motor.faturamento_total == 50.0
 
 
+def test_preparar_distribuicao_consome_a_carga_impedindo_faturamento_duplicado():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0)
+
+        _preparar_distribuicao(cliente, _autorizar(cliente))
+        motor.avancar_ciclo(1)
+        assert motor.faturamento_total == 50.0
+        assert "carga-1" not in motor.cargas
+
+        _preparar_distribuicao(cliente, _autorizar(cliente))
+        motor.avancar_ciclo(1)
+
+        assert "operacao_invalida" in _tipos_de_eventos(motor)
+        assert motor.faturamento_total == 50.0
+
+
 def test_preparar_distribuicao_sem_autorizacao_valida_gera_operacao_invalida():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
