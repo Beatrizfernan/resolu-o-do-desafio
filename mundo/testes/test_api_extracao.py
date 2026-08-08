@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
+from mundo.dominio.robos import EstadoDoRobo
 
 
 def test_consultar_jazidas_retorna_dez_jazidas():
@@ -35,6 +36,50 @@ def test_iniciar_extracao_e_aceita_e_processada_no_proximo_ciclo():
         assert motor.robos["mineradora-1"].estado.value == "executando"
         motor.avancar_ciclo(5)
         assert motor.robos["mineradora-1"].estado.value == "aguardando"
+
+
+def test_interromper_extracao_muda_estado_para_retornando():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        jazidas = cliente.get("/extracao/jazidas").json()
+        cliente.post(
+            "/extracao/iniciar-extracao",
+            json={
+                "identificador_da_unidade": "mineradora-1",
+                "identificador_da_jazida": jazidas[0]["identificador"],
+                "quantidade": 10.0,
+            },
+        )
+        motor = instancia_do_mundo.obter_motor()
+        motor.avancar_ciclo(1)
+        assert motor.robos["mineradora-1"].estado.value == "executando"
+
+        resposta = cliente.post(
+            "/extracao/interromper-extracao",
+            json={"identificador_da_unidade": "mineradora-1"},
+        )
+        assert resposta.status_code == 200
+        assert resposta.json()["aceito"] is True
+
+        motor.avancar_ciclo(1)
+        assert motor.robos["mineradora-1"].estado.value == "retornando"
+
+
+def test_retornar_unidade_muda_estado_para_disponivel():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.robos["mineradora-1"].estado = EstadoDoRobo.RETORNANDO
+
+        resposta = cliente.post(
+            "/extracao/retornar-unidade",
+            json={"identificador_da_unidade": "mineradora-1"},
+        )
+        assert resposta.status_code == 200
+        assert resposta.json()["aceito"] is True
+
+        motor.avancar_ciclo(1)
+        assert motor.robos["mineradora-1"].estado.value == "disponivel"
 
 
 def test_inspecionar_jazida_inexistente_retorna_404():
