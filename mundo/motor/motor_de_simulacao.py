@@ -76,7 +76,16 @@ class MotorDeSimulacao:
                         "motivo": str(erro),
                     },
                 )
-        self._agenda_de_efeitos.disparar_ate(self.ciclo_atual)
+        for erro in self._agenda_de_efeitos.disparar_ate(self.ciclo_atual):
+            self.eventos.publicar(
+                tipo="operacao_invalida",
+                ciclo=self.ciclo_atual,
+                dados={
+                    "comando": "efeito_agendado",
+                    "central": "motor",
+                    "motivo": str(erro),
+                },
+            )
 
     def _gerar_mundo_inicial(self) -> None:
         contador_jazidas = 1

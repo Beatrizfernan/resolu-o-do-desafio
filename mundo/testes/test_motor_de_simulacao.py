@@ -72,6 +72,28 @@ def test_comando_com_erro_nao_interrompe_resto_do_ciclo():
     assert any(e.tipo == "operacao_invalida" for e in motor.eventos.consultar_eventos())
 
 
+def test_efeito_com_erro_nao_interrompe_os_demais_efeitos_do_ciclo():
+    motor = _criar_motor()
+    observado: list[str] = []
+
+    def falhar():
+        raise ValueError("jazida removida")
+
+    motor.agendar_efeito(motor.ciclo_atual + 1, falhar)
+    motor.agendar_efeito(motor.ciclo_atual + 1, lambda: observado.append("efeito-seguinte"))
+
+    motor.avancar_ciclo(1)
+
+    assert observado == ["efeito-seguinte"]
+    eventos = [e for e in motor.eventos.consultar_eventos() if e.tipo == "operacao_invalida"]
+    assert len(eventos) == 1
+    assert eventos[0].dados["comando"] == "efeito_agendado"
+    assert "jazida removida" in eventos[0].dados["motivo"]
+
+    motor.avancar_ciclo(1)
+    assert motor.ciclo_atual == 2
+
+
 def test_efeito_agendado_dispara_no_ciclo_alvo():
     motor = _criar_motor()
     disparado = []

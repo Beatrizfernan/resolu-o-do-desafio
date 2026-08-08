@@ -21,7 +21,12 @@ class AgendaDeEfeitos:
     def agendar(self, ciclo_alvo: int, callback: Callable[[], None]) -> None:
         heapq.heappush(self._heap, _ItemAgenda(ciclo_alvo, next(self._contador), callback))
 
-    def disparar_ate(self, ciclo_atual: int) -> None:
+    def disparar_ate(self, ciclo_atual: int) -> list[Exception]:
+        falhas: list[Exception] = []
         while self._heap and self._heap[0].ciclo_alvo <= ciclo_atual:
             item = heapq.heappop(self._heap)
-            item.callback()
+            try:
+                item.callback()
+            except Exception as erro:
+                falhas.append(erro)
+        return falhas

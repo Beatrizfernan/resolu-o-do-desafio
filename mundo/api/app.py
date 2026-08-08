@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -15,12 +16,17 @@ from .dependencias import instancia_do_mundo
 INTERVALO_DE_CICLO_SEGUNDOS = 1.0
 CAMINHO_CATALOGO_PADRAO = Path(__file__).parent.parent / "config" / "minerais.json"
 
+logger = logging.getLogger(__name__)
+
 
 async def _loop_real_time() -> None:
     while True:
         await asyncio.sleep(INTERVALO_DE_CICLO_SEGUNDOS)
         if instancia_do_mundo.motor is not None:
-            instancia_do_mundo.motor.avancar_ciclo()
+            try:
+                instancia_do_mundo.motor.avancar_ciclo()
+            except Exception:
+                logger.exception("Falha ao avançar o ciclo da simulação")
 
 
 @asynccontextmanager
