@@ -175,8 +175,10 @@ def test_viagem_acumula_desgaste_na_transportadora():
 CICLOS_DE_OPERACAO_CONTINUA = 60
 
 
-def _operar_continuamente(modo: str) -> tuple[float, float]:
-    """Extrai sem pausas por uma janela fixa de ciclos.
+def _operar_continuamente(
+    modo: str, ciclos: int = CICLOS_DE_OPERACAO_CONTINUA
+) -> tuple[float, float]:
+    """Extrai sem pausas por uma janela de `ciclos` ciclos.
 
     Devolve (unidades entregues, energia gasta) para o modo dado, ponderando
     a entrega pela qualidade inicial do modo — o que interessa é valor útil,
@@ -191,7 +193,7 @@ def _operar_continuamente(modo: str) -> tuple[float, float]:
         energia_antes = motor.energia.consultar_energia("extracao")
         entregue = 0.0
 
-        for _ in range(CICLOS_DE_OPERACAO_CONTINUA):
+        for _ in range(ciclos):
             if unidade.estado.value == "disponivel":
                 resposta = _extrair(cliente, modo=modo, quantidade=2.0)
                 if resposta.status_code == 200:
@@ -222,36 +224,71 @@ def test_agressivo_deixa_de_dominar_sob_operacao_continua():
     )
 
 
-# Margem acima da qual um modo deixa de estar empatado e passa a ser a escolha
-# padrão. 5% é a ordem de grandeza do próprio ruído do simulador — durações
-# arredondadas para ciclos inteiros e degraus do fator de escassez movem os
-# custos nessa faixa —, então uma diferença menor que isso não é vantagem
-# estratégica estável. Acima dela, um operador racional escolheria sempre o
-# mesmo modo e a decisão "qual modo usar" deixa de existir. Modos *próximos*
-# são o resultado saudável: a decisão real vira quando pausar, não qual modo.
-MARGEM_DE_DOMINANCIA = 0.05
+# Modos do mais contido ao mais intenso. A posição na tupla é a própria
+# definição de "mais conservador": índice menor, ritmo menor.
+MODOS_DO_MAIS_CONSERVADOR_AO_MAIS_INTENSO = ("cuidadoso", "normal", "agressivo")
+
+# Janelas de operação contínua, em ciclos. Cobrem os dois lados da virada
+# observada por volta de 70 ciclos: 40 e 60 ficam antes dela, 80 e 120 depois.
+# Só um par de janelas não distinguiria uma troca de liderança real de um
+# empate ruidoso; quatro mostram a tendência sustentada dos dois lados.
+JANELAS_DE_OPERACAO_CONTINUA = (40, 60, 80, 120)
 
 
-def test_nenhum_modo_e_universalmente_mais_barato_sob_operacao_continua():
-    """Impede a dominância invertida.
+def _custo_por_unidade_util(modo: str, ciclos: int) -> float:
+    entregue, energia = _operar_continuamente(modo, ciclos)
+    return energia / entregue
 
-    O sub-projeto existe para eliminar um modo universalmente melhor. Punir só
-    os extremos apenas trocaria `agressivo` por `normal` como escolha única —
-    o mesmo defeito com outro nome. Sob uso contínuo os três precisam ficar
-    competitivos entre si.
+
+def test_lideranca_de_custo_gira_conforme_a_janela_de_operacao():
+    """A liderança de custo *gira* com o tamanho da janela de operação.
+
+    O sub-projeto existe para eliminar um modo universalmente melhor. Testar
+    isso como "os custos ficam a menos de X% de distância" exige um limiar
+    arbitrário, e mede a coisa errada: modos empatados também tornariam a
+    escolha irrelevante. A propriedade que realmente importa é que o modo mais
+    barato *muda* conforme a janela — `normal` rende mais em rajadas curtas,
+    `cuidadoso` assume quando a operação se estende e o desgaste acumulado
+    domina o custo. Isso é uma afirmação sem constante mágica: nenhum modo é o
+    mais barato em todas as janelas, então nenhuma estratégia fixa é ótima.
+
+    `agressivo` nunca lidera em custo — o que compra a permanência dele é o
+    volume bruto, coberto por `test_agressivo_deixa_de_dominar_sob_operacao_continua`.
     """
-    custos = {}
-    for modo in ("cuidadoso", "normal", "agressivo"):
-        entregue, energia = _operar_continuamente(modo)
-        custos[modo] = energia / entregue
+    custos = {
+        janela: {
+            modo: _custo_por_unidade_util(modo, janela)
+            for modo in MODOS_DO_MAIS_CONSERVADOR_AO_MAIS_INTENSO
+        }
+        for janela in JANELAS_DE_OPERACAO_CONTINUA
+    }
+    lideres = {
+        janela: min(por_modo, key=lambda modo: por_modo[modo])
+        for janela, por_modo in custos.items()
+    }
+    tabela = "; ".join(
+        f"{janela} ciclos: "
+        + ", ".join(f"{modo}={custo:.3f}" for modo, custo in custos[janela].items())
+        for janela in JANELAS_DE_OPERACAO_CONTINUA
+    )
 
-    ordenados = sorted(custos.items(), key=lambda item: item[1])
-    (modo_barato, custo_barato), (_, custo_seguinte) = ordenados[0], ordenados[1]
-    vantagem = (custo_seguinte - custo_barato) / custo_seguinte
+    assert len(set(lideres.values())) > 1, (
+        f"'{next(iter(lideres.values()))}' é o mais barato em todas as janelas, "
+        f"logo é universalmente melhor: {tabela}"
+    )
 
-    assert vantagem <= MARGEM_DE_DOMINANCIA, (
-        f"'{modo_barato}' é universalmente mais barato por {vantagem:.1%}: "
-        + ", ".join(f"{nome}={custo:.3f}" for nome, custo in ordenados)
+    assert "agressivo" not in lideres.values(), (
+        f"'agressivo' lidera em custo em alguma janela, invertendo a direção "
+        f"esperada da virada: {tabela}"
+    )
+
+    lider_curto = lideres[JANELAS_DE_OPERACAO_CONTINUA[0]]
+    lider_longo = lideres[JANELAS_DE_OPERACAO_CONTINUA[-1]]
+    posicao = MODOS_DO_MAIS_CONSERVADOR_AO_MAIS_INTENSO.index
+    assert posicao(lider_longo) < posicao(lider_curto), (
+        f"a virada aponta para o lado errado: em janela curta lidera "
+        f"'{lider_curto}' e em janela longa '{lider_longo}'; esperava-se um "
+        f"líder mais conservador na janela longa. {tabela}"
     )
 
 
