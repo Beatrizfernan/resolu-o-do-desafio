@@ -104,6 +104,16 @@ Perda de qualidade aplicada a toda carga a cada ciclo:
 
 O `fator de localização` (`modos.json`'s `multiplicador_por_local`) depende do estado da carga: 2.0 exposta na jazida, 1.0 em armazém ou em trânsito, 0.0 entregue. O `fator do modo` é o `mult_degradacao` do modo de transporte ativo (1.0 para `normal`, 0.5 para `rapido`, 2.5 para `economico`), aplicado enquanto a carga viaja. Minerais estáveis como a hematita quase não perdem qualidade parados; o gelo de água perde rápido. Urgência é propriedade do mineral, não regra especial.
 
+Em trânsito entra ainda o **fator de raridade** (ver adiante), que só vale no caminho.
+
+## Fator de Raridade em Trânsito
+
+`1.0 + raridade × sensibilidade_a_raridade_em_transito` (30.0), multiplicado na degradação de toda carga **enquanto viaja**. Minério raro é instável fora de um armazém: cada ciclo na estrada custa mais quanto mais raro ele for. Parada em armazém a raridade não pesa — o que castiga é a exposição no caminho, não a posse.
+
+É este fator que dá sentido ao transporte rápido. Sem ele, `economico` era a resposta certa para todo mineral em toda rota do mundo: velocidade não comprava nada que valesse a energia a mais, e a decisão entre modos de transporte não existia. Com ele, minério comum viaja devagar e barato, minério raro não pode esperar — e os três modos passam a vencer em algum cenário. Fixado por `mundo/testes/test_dominancia_de_transporte.py`.
+
+`raridade` já existia no catálogo de minerais e, até este ponto, nenhum cálculo do motor a lia.
+
 ## Desgaste
 
 Acúmulo em `Robo.desgaste` provocado por operar. Cada operação soma `taxa_de_desgaste / perfil.mult_duracao` (1.0 e os multiplicadores de duração em `modos.json`), logo após o débito de energia, tanto em `mundo/api/extracao.py` quanto em `mundo/api/transporte.py`. O desgaste segue o **ritmo** da operação, não a energia gasta nela: modos mais rápidos concluem mais operações na mesma janela e por isso acumulam mais depressa. Nunca fica negativo.

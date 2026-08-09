@@ -222,7 +222,7 @@ def test_custo_energetico_escala_com_o_mult_energia_do_modo():
 def test_custo_energetico_do_modo_cuidadoso_e_o_mais_caro():
     custo_extracao, cobrado = _custo_de_uma_extracao("cuidadoso")
 
-    # custo = custo_extracao × quantidade(10) × fator_base_de_energia(0.2) × mult_energia(1.55).
+    # custo = custo_extracao × quantidade(10) × fator_base_de_energia(0.2) × mult_energia(1.8).
     assert cobrado == pytest.approx(custo_extracao * 10.0 * 0.2 * 1.8)
 
 
