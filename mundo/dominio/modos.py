@@ -45,6 +45,7 @@ class CatalogoDeModos:
         taxa_de_desgaste: float = 0.0,
         recuperacao_de_desgaste_por_ciclo: float = 0.0,
         sensibilidade_ao_desgaste: float = 0.0,
+        sensibilidade_a_raridade_em_transito: float = 0.0,
     ) -> None:
         self._extracao = extracao
         self._transporte = transporte
@@ -55,6 +56,7 @@ class CatalogoDeModos:
         self.taxa_de_desgaste = taxa_de_desgaste
         self.recuperacao_de_desgaste_por_ciclo = recuperacao_de_desgaste_por_ciclo
         self.sensibilidade_ao_desgaste = sensibilidade_ao_desgaste
+        self.sensibilidade_a_raridade_em_transito = sensibilidade_a_raridade_em_transito
 
     @classmethod
     def carregar_de_arquivo(cls, caminho: Path) -> "CatalogoDeModos":
@@ -73,6 +75,7 @@ class CatalogoDeModos:
             dados["taxa_de_desgaste"],
             dados["recuperacao_de_desgaste_por_ciclo"],
             dados["sensibilidade_ao_desgaste"],
+            dados["sensibilidade_a_raridade_em_transito"],
         )
 
     def obter_extracao(self, modo: ModoDeExtracao) -> PerfilDeExtracao:
@@ -101,6 +104,19 @@ class CatalogoDeModos:
             return self.fator_escassez_maximo
         fracao = min(1.0, fracao_restante)
         return min(self.fator_escassez_maximo, fracao ** -self.expoente_escassez)
+
+    def fator_de_raridade_em_transito(self, raridade: float) -> float:
+        """Quanto a raridade acelera a perda de qualidade durante a viagem.
+
+        Minério raro é instável fora de um armazém: quanto mais raro, mais
+        depressa cada ciclo de viagem o degrada. É isto que dá ao transporte
+        rápido uma razão de existir — carga comum pode viajar devagar e barato,
+        carga rara não pode.
+
+        Vale só em trânsito. Parada num armazém a raridade não pesa: o que
+        castiga é o tempo exposto no caminho, não a posse.
+        """
+        return 1.0 + max(0.0, raridade) * self.sensibilidade_a_raridade_em_transito
 
     def fator_de_desgaste(self, desgaste: float) -> float:
         """Quanto o desgaste acumulado encarece a próxima operação.

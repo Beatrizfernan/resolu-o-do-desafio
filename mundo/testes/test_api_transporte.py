@@ -271,12 +271,13 @@ def test_viagem_conclui_apos_o_tempo_base_degradando_a_carga():
         assert motor.robos["transportadora-1"].estado.value == "retornando"
         # A viagem move a carga para em_transito no ciclo 1 e a devolve ao armazém no
         # ciclo de chegada (1 + tempo_base = 6), antes da degradação daquele ciclo.
-        # Em trânsito (ciclos 1..5, modo normal): 0.2 × 0.1 × 1.0 × 1.0 = 0.02 por ciclo
-        # → 0.1; no armazém (ciclo 6): 0.2 × 0.1 × 1.0 × 1.0 = 0.02.
-        # 90.0 - 0.1 - 0.02 = 89.88.
+        # Em trânsito (ciclos 1..5, modo normal) a raridade também pesa:
+        # 0.2 × 0.1 × 1.0 × 1.0 × (1 + 0.1 × 30) = 0.02 × 4.0 = 0.08 por ciclo → 0.4.
+        # No armazém (ciclo 6) a raridade não entra: 0.2 × 0.1 × 1.0 × 1.0 = 0.02.
+        # 90.0 - 0.4 - 0.02 = 89.58.
         carga = motor.cargas["carga-1"]
         assert carga.local == LocalDaCarga.EM_ARMAZEM
-        assert carga.qualidade == pytest.approx(89.88)
+        assert carga.qualidade == pytest.approx(89.58)
 
 
 def test_modo_rapido_chega_antes_e_gasta_mais_energia_que_o_economico():

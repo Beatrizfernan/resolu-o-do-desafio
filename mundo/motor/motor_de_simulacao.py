@@ -6,7 +6,7 @@ from pathlib import Path
 
 from mundo.dominio.armazens import Armazem
 from mundo.dominio.autorizacao import RegistroDeAutorizacoes
-from mundo.dominio.cargas import CargaMineral
+from mundo.dominio.cargas import CargaMineral, LocalDaCarga
 from mundo.dominio.energia import GerenciadorDeEnergia
 from mundo.dominio.jazidas import EstadoDaJazida, Jazida
 from mundo.dominio.minerais import CatalogoDeMinerais
@@ -107,6 +107,12 @@ class MotorDeSimulacao:
                 * self.catalogo_de_modos.mult_do_local(carga.local.value)
                 * carga.mult_degradacao_local
             )
+            # A raridade só pesa no caminho: minério raro é instável fora de um
+            # armazém, então cada ciclo de viagem custa mais quanto mais raro
+            # for. É o que faz a pressa valer a pena para carga valiosa e não
+            # valer para carga comum.
+            if carga.local == LocalDaCarga.EM_TRANSITO:
+                perda *= self.catalogo_de_modos.fator_de_raridade_em_transito(mineral.raridade)
             carga.degradar(taxa_degradacao=perda)
 
     def _recuperar_desgaste(self) -> None:

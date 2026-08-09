@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from mundo.dominio.cargas import CargaMineral, LocalDaCarga
 from mundo.dominio.minerais import CatalogoDeMinerais
 from mundo.motor.motor_de_simulacao import ConfiguracaoDaSimulacao, MotorDeSimulacao
@@ -83,7 +85,9 @@ def test_multiplicador_de_contexto_amplifica_a_perda():
 
     perda_neutra = 100.0 - motor.cargas["neutra"].qualidade
     perda_penalizada = 100.0 - motor.cargas["penalizada"].qualidade
-    assert perda_penalizada == perda_neutra * 2.0
+    # `approx` porque o fator de raridade em trânsito deixou as perdas em
+    # binário não-exato; a razão de 2.0 continua sendo o que se afirma.
+    assert perda_penalizada == pytest.approx(perda_neutra * 2.0)
 
 
 def test_carga_entregue_nao_degrada():
