@@ -194,3 +194,34 @@ def test_solicitar_transporte_rejeita_autorizacao_inexistente():
         tipos = _tipos_de_eventos(motor)
         assert "carga_disponivel" not in tipos
         assert "operacao_invalida" in tipos
+
+
+def test_receber_carga_move_a_carga_para_o_armazem():
+    from mundo.dominio.cargas import LocalDaCarga
+
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        _receber_carga(cliente)
+        motor.avancar_ciclo(1)
+
+        assert motor.cargas["carga-1"].local == LocalDaCarga.EM_ARMAZEM
+
+
+def test_receber_carga_normaliza_o_multiplicador_de_degradacao_do_local():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.cargas["carga-1"] = CargaMineral(
+            "carga-1", "hematita", 20.0, 90.0, mult_degradacao_local=0.5,
+        )
+
+        cliente.post("/armazenagem/receber-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificador_da_carga": "carga-1",
+        })
+        motor.avancar_ciclo(1)
+
+        # Entrar no armazém é uma mudança de local: o multiplicador que valia no
+        # local anterior não pode viajar junto com a carga.
+        assert motor.cargas["carga-1"].mult_degradacao_local == 1.0

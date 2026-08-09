@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from mundo.dominio.cargas import LocalDaCarga
+from mundo.dominio.modos import ModoDeTransporte
 from mundo.dominio.robos import EstadoDoRobo
 from mundo.dominio.rotas import CondicaoDaRota
 from mundo.motor.comandos import Comando
@@ -98,6 +100,7 @@ class RequisicaoDeViagem(BaseModel):
     identificador_da_rota: str
     identificador_da_carga: str
     id_autorizacao: str
+    modo: ModoDeTransporte = ModoDeTransporte.NORMAL
 
 
 @router.post("/iniciar-viagem")
@@ -107,6 +110,8 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
     rota = motor.rotas.get(requisicao.identificador_da_rota)
     if unidade is None or rota is None:
         raise HTTPException(status_code=404, detail="Unidade ou rota não encontrada")
+    if motor.cargas.get(requisicao.identificador_da_carga) is None:
+        raise HTTPException(status_code=404, detail="Carga não encontrada")
 
     def executar() -> None:
         motor.autorizacoes.consumir(requisicao.id_autorizacao, "iniciar_viagem")
@@ -114,19 +119,53 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
             raise ValueError("Rota interditada")
         if unidade.viagens_disponiveis <= 0:
             raise ValueError("Sem viagens disponíveis")
-        motor.energia.debitar(CENTRAL, CUSTO_ENERGETICO_VIAGEM)
+        perfil = motor.catalogo_de_modos.obter_transporte(requisicao.modo)
+        custo = (
+            CUSTO_ENERGETICO_VIAGEM
+            * perfil.mult_energia
+            * motor.catalogo_de_modos.fator_de_desgaste(unidade.desgaste)
+        )
+        motor.energia.debitar(CENTRAL, custo)
+        # O desgaste segue o ritmo de operação, não a energia gasta: quem opera
+        # em ciclos mais curtos castiga mais a máquina por unidade de tempo.
+        unidade.desgaste += motor.catalogo_de_modos.taxa_de_desgaste / perfil.mult_duracao
         unidade.viagens_disponiveis -= 1
         unidade.estado = EstadoDoRobo.EXECUTANDO
-        ciclo_chegada = motor.ciclo_atual + rota.tempo_base
+        carga = motor.cargas[requisicao.identificador_da_carga]
+        local_de_origem = carga.local
+        carga.mover_para(LocalDaCarga.EM_TRANSITO, perfil.mult_degradacao)
+        duracao = max(1, round(rota.tempo_base * perfil.mult_duracao))
+        ciclo_chegada = motor.ciclo_atual + duracao
 
         def concluir() -> None:
-            carga = motor.cargas[requisicao.identificador_da_carga]
-            carga.degradar(taxa_degradacao=rota.risco, fator_contexto=1.0)
+            if unidade.estado != EstadoDoRobo.EXECUTANDO:
+                # A viagem não aconteceu: a carga volta para onde saiu, sem o
+                # multiplicador do modo. Deixá-la em trânsito a condenaria a
+                # degradar até zero sem nenhum caminho de recuperação.
+                carga_abortada = motor.cargas.get(requisicao.identificador_da_carga)
+                if carga_abortada is not None:
+                    carga_abortada.mover_para(local_de_origem)
+                motor.eventos.publicar(
+                    "viagem_abortada",
+                    motor.ciclo_atual,
+                    {
+                        "unidade": unidade.identificador,
+                        "carga": requisicao.identificador_da_carga,
+                    },
+                )
+                return
+            carga_em_transito = motor.cargas[requisicao.identificador_da_carga]
+            carga_em_transito.mover_para(LocalDaCarga.EM_ARMAZEM)
             unidade.estado = EstadoDoRobo.RETORNANDO
             motor.eventos.publicar(
                 "transporte_concluido",
                 motor.ciclo_atual,
-                {"unidade": unidade.identificador, "carga": carga.identificador},
+                {
+                    "unidade": unidade.identificador,
+                    "carga": carga_em_transito.identificador,
+                    "modo": requisicao.modo.value,
+                    "desgaste_da_unidade": unidade.desgaste,
+                },
             )
 
         motor.agendar_efeito(ciclo_chegada, concluir)

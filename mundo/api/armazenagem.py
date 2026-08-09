@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from mundo.dominio.cargas import LocalDaCarga
 from mundo.motor.comandos import Comando
 
 from .dependencias import obter_motor
@@ -73,6 +74,7 @@ async def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
             raise ValueError("Mineral incompatível com o armazém")
         motor.energia.debitar(CENTRAL, CUSTO_ENERGETICO_OPERACAO)
         armazem.reservar_espaco(carga.quantidade)
+        carga.mover_para(LocalDaCarga.EM_ARMAZEM)
         if armazem.ocupacao >= armazem.capacidade:
             motor.eventos.publicar(
                 "armazem_lotado", motor.ciclo_atual, {"armazem": armazem.identificador},

@@ -1,4 +1,13 @@
-from mundo.dominio.cargas import CargaMineral, clamp_qualidade
+from pathlib import Path
+
+from mundo.dominio.cargas import CargaMineral, LocalDaCarga, clamp_qualidade
+from mundo.dominio.minerais import CatalogoDeMinerais
+
+CAMINHO_CATALOGO = Path(__file__).parent.parent / "config" / "minerais.json"
+
+
+def _mineral(nome: str):
+    return CatalogoDeMinerais.carregar_de_arquivo(CAMINHO_CATALOGO).obter(nome)
 
 
 def test_qualidade_e_clamped_ao_criar_acima_de_100():
@@ -32,3 +41,47 @@ def test_clamp_qualidade_funcao_isolada():
     assert clamp_qualidade(200) == 100
     assert clamp_qualidade(-10) == 0
     assert clamp_qualidade(42) == 42
+
+
+def test_carga_nasce_em_jazida_com_multiplicador_neutro():
+    carga = CargaMineral(identificador="c1", mineral="hematita", quantidade=10.0)
+    assert carga.local == LocalDaCarga.EM_JAZIDA
+    assert carga.mult_degradacao_local == 1.0
+
+
+def test_sensibilidade_aplicavel_em_armazem():
+    carga = CargaMineral("c1", "gelo_de_agua", 10.0, local=LocalDaCarga.EM_ARMAZEM)
+    mineral = _mineral("gelo_de_agua")
+    assert carga.sensibilidade_aplicavel(mineral) == mineral.sensibilidade_armazenagem
+
+
+def test_sensibilidade_aplicavel_em_transito():
+    carga = CargaMineral("c1", "gelo_de_agua", 10.0, local=LocalDaCarga.EM_TRANSITO)
+    mineral = _mineral("gelo_de_agua")
+    assert carga.sensibilidade_aplicavel(mineral) == mineral.sensibilidade_transporte
+
+
+def test_sensibilidade_aplicavel_exposta_na_jazida_e_total():
+    carga = CargaMineral("c1", "gelo_de_agua", 10.0, local=LocalDaCarga.EM_JAZIDA)
+    assert carga.sensibilidade_aplicavel(_mineral("gelo_de_agua")) == 1.0
+
+
+def test_mover_para_troca_local_e_multiplicador_juntos():
+    carga = CargaMineral("c1", "gelo_de_agua", 10.0, local=LocalDaCarga.EM_JAZIDA)
+
+    carga.mover_para(LocalDaCarga.EM_TRANSITO, 2.5)
+
+    assert carga.local == LocalDaCarga.EM_TRANSITO
+    assert carga.mult_degradacao_local == 2.5
+
+
+def test_mover_para_sem_multiplicador_devolve_a_degradacao_ao_neutro():
+    carga = CargaMineral(
+        "c1", "gelo_de_agua", 10.0,
+        local=LocalDaCarga.EM_TRANSITO, mult_degradacao_local=0.5,
+    )
+
+    carga.mover_para(LocalDaCarga.EM_ARMAZEM)
+
+    assert carga.local == LocalDaCarga.EM_ARMAZEM
+    assert carga.mult_degradacao_local == 1.0
