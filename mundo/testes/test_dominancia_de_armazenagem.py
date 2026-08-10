@@ -146,6 +146,47 @@ def test_guardar_na_ordem_de_entrega_rende_mais_que_guardar_contra_ela():
     )
 
 
+def test_ordenar_pela_perda_de_valor_rende_mais_que_ordenar_pelo_preco():
+    """A chave certa não é a óbvia.
+
+    O teste anterior mostra que a ordem importa; este mostra qual ordem. As
+    duas estratégias comparadas são internamente coerentes — cada uma guarda e
+    entrega segundo a chave em que acredita — então a profundidade é zero nas
+    duas e o desempilhamento não paga nada. O que sobra é só a degradação, que
+    é exatamente o que a chave certa antecipa: o preço sozinho põe o cristal
+    na frente quando quem sangra mais depressa é o gelo.
+
+    A direção é o que se afirma; a magnitude não impressiona e não deve ser
+    lida como se impressionasse. Medido, a chave certa rende 0.02% a mais —
+    0.72 em 2925. É pouco porque gelo (25.2 de valor por ciclo) e cristal
+    (24.0) sangram quase igual, e são justamente esses dois que trocam de
+    lugar entre as duas chaves. A propriedade é real e determinística, mas
+    errar a chave é quase de graça: quem quiser que ela pese precisa separar
+    as taxas de perda em `minerais.json`.
+
+    O teste se protege: se uma recalibração fizer as duas chaves coincidirem,
+    a primeira asserção falha dizendo isso, em vez de passar sem testar nada.
+    """
+    por_perda = _ordem_de_entrega()
+    por_preco = sorted(
+        SORTIMENTO, key=lambda n: MINERAIS.obter(n).valor_por_unidade, reverse=True,
+    )
+
+    assert por_perda != por_preco, (
+        "o catálogo precisa fazer as duas chaves divergirem, senão este teste "
+        "não prova nada"
+    )
+
+    liquido_por_perda = _operar(list(reversed(por_perda)), por_perda)
+    liquido_por_preco = _operar(list(reversed(por_preco)), por_preco)
+
+    assert liquido_por_perda > liquido_por_preco, (
+        f"a chave perda-por-ciclo rendeu {liquido_por_perda:.2f} contra "
+        f"{liquido_por_preco:.2f} da chave preço: seguir o preço deixou de ser "
+        f"o palpite errado, e a decisão de ordenação virou indiferente"
+    )
+
+
 def test_movimento_minimo_custa_menos_que_remontar_a_pilha():
     """A implementação esperta é recompensada.
 
