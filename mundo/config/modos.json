@@ -20,6 +20,7 @@
     "em_jazida": 2.0,
     "em_armazem": 1.0,
     "em_transito": 1.0,
+    "na_mao": 2.0,
     "entregue": 0.0
   }
 }

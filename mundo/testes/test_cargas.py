@@ -2,8 +2,10 @@ from pathlib import Path
 
 from mundo.dominio.cargas import CargaMineral, LocalDaCarga, clamp_qualidade
 from mundo.dominio.minerais import CatalogoDeMinerais
+from mundo.dominio.modos import CatalogoDeModos
 
 CAMINHO_CATALOGO = Path(__file__).parent.parent / "config" / "minerais.json"
+CAMINHO_MODOS = Path(__file__).parent.parent / "config" / "modos.json"
 
 
 def _mineral(nome: str):
@@ -85,3 +87,17 @@ def test_mover_para_sem_multiplicador_devolve_a_degradacao_ao_neutro():
 
     assert carga.local == LocalDaCarga.EM_ARMAZEM
     assert carga.mult_degradacao_local == 1.0
+
+
+def test_carga_na_mao_usa_sensibilidade_neutra():
+    """Na mão não há proteção de armazém nem cuidado de transporte."""
+    carga = CargaMineral("c1", "hematita", 10.0, 100.0, local=LocalDaCarga.NA_MAO)
+    mineral = CatalogoDeMinerais.carregar_de_arquivo(CAMINHO_CATALOGO).obter("hematita")
+
+    assert carga.sensibilidade_aplicavel(mineral) == 1.0
+
+
+def test_multiplicador_de_carga_na_mao_e_o_de_exposta():
+    catalogo = CatalogoDeModos.carregar_de_arquivo(CAMINHO_MODOS)
+
+    assert catalogo.mult_do_local("na_mao") == catalogo.mult_do_local("em_jazida")
