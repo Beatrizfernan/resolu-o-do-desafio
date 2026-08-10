@@ -49,7 +49,7 @@
 
 **Interfaces:**
 - Consumes: nada.
-- Produces: `Armazem.pilha: list[str]`, `Armazem.empilhar(identificador: str, quantidade: float) -> None`, `Armazem.desempilhar_ate(identificador: str) -> list[str]`, `Armazem.profundidade(identificador: str) -> int`, `Armazem.reordenar(nova_ordem: list[str]) -> int`, e a exceção `CargaNaoEstaNoArmazemError`.
+- Produces: `Armazem.pilha: list[str]`, `Armazem.empilhar(identificador: str, quantidade: float) -> None`, `Armazem.desempilhar_ate(identificador: str, quantidades: dict[str, float]) -> list[str]`, `Armazem.profundidade(identificador: str) -> int`, `Armazem.reordenar(nova_ordem: list[str]) -> int`, e a exceção `CargaNaoEstaNoArmazemError`.
 
 Índice 0 é o **fundo**; o último elemento é o **topo**. `profundidade` conta a partir do topo: o topo tem profundidade 0.
 
@@ -83,7 +83,8 @@ def test_desempilhar_devolve_o_alvo_e_tudo_acima_do_topo_para_baixo():
     for nome in ("c1", "c2", "c3", "c4"):
         armazem.empilhar(nome, 10.0)
 
-    removidos = armazem.desempilhar_ate("c2")
+    quantidades = {nome: 10.0 for nome in armazem.pilha}
+    removidos = armazem.desempilhar_ate("c2", quantidades)
 
     assert removidos == ["c4", "c3", "c2"]
     assert armazem.pilha == ["c1"]
@@ -95,7 +96,7 @@ def test_desempilhar_o_topo_devolve_so_ele():
     armazem.empilhar("c1", 10.0)
     armazem.empilhar("c2", 10.0)
 
-    assert armazem.desempilhar_ate("c2") == ["c2"]
+    assert armazem.desempilhar_ate("c2", {"c1": 10.0, "c2": 10.0}) == ["c2"]
     assert armazem.pilha == ["c1"]
 
 
@@ -104,7 +105,7 @@ def test_desempilhar_carga_ausente_levanta():
     armazem.empilhar("c1", 10.0)
 
     with pytest.raises(CargaNaoEstaNoArmazemError):
-        armazem.desempilhar_ate("fantasma")
+        armazem.desempilhar_ate("fantasma", {"c1": 10.0})
 
 
 def test_reordenar_devolve_a_soma_dos_deslocamentos():
@@ -149,7 +150,7 @@ def test_ocupacao_nunca_diverge_da_pilha():
     armazem = Armazem("a1", capacidade=100.0, localizacao="setor-1", condicoes="normal")
     armazem.empilhar("c1", 7.0)
     armazem.empilhar("c2", 3.0)
-    armazem.desempilhar_ate("c2")
+    armazem.desempilhar_ate("c2", {"c1": 7.0, "c2": 3.0})
 
     assert armazem.pilha == ["c1"]
     assert armazem.ocupacao == 7.0
@@ -229,7 +230,7 @@ E os métodos, substituindo `reservar_espaco`/`liberar_espaco` como interface p�
         return movimentos
 ```
 
-**Atenção:** `desempilhar_ate` recebe `quantidades` porque o domínio do armazém não conhece `CargaMineral` — a direção de dependência não permite. O chamador passa o mapa de identificador para quantidade. Ajustar os testes do Step 1 que chamam `desempilhar_ate` para passar esse dicionário; por exemplo `armazem.desempilhar_ate("c2", {"c2": 10.0, "c3": 10.0, "c4": 10.0})`.
+**Por que `desempilhar_ate` recebe `quantidades`:** o domínio do armazém não conhece `CargaMineral`, e importá-lo quebraria a direção de dependência que o projeto manteve intacta. O chamador — que já tem as cargas em mão — passa o mapa de identificador para quantidade. Os testes do Step 1 já chamam com esse segundo argumento.
 
 - [ ] **Step 4: Rodar e ver passar**
 
@@ -761,17 +762,24 @@ async def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
                 raise ValueError("Mineral incompatível com o armazém")
             total += carga.quantidade * custos.custo_de_armazenagem_por_unidade
 
+        # A ordem é validada ANTES de empilhar. `executar()` roda dentro do
+        # try do motor, então levantar aqui vira `operacao_invalida` — mas se
+        # as cargas já tivessem sido empilhadas, a pilha ficaria alterada por
+        # uma operação que o mundo registrou como inválida.
+        if requisicao.nova_ordem is not None:
+            pilha_resultante = armazem.pilha + list(requisicao.identificadores_das_cargas)
+            if sorted(requisicao.nova_ordem) != sorted(pilha_resultante):
+                raise ValueError(
+                    "A nova ordem precisa ser uma permutação exata da pilha resultante"
+                )
+
+        for identificador in requisicao.identificadores_das_cargas:
+            armazem.empilhar(identificador, motor.cargas[identificador].quantidade)
+
         movimentos = 0
         if requisicao.nova_ordem is not None:
-            # Empilha antes de validar a ordem: `nova_ordem` descreve a pilha
-            # final, com as cargas novas já dentro.
-            for identificador in requisicao.identificadores_das_cargas:
-                armazem.empilhar(identificador, motor.cargas[identificador].quantidade)
             movimentos = armazem.reordenar(requisicao.nova_ordem)
             total += movimentos * custos.custo_por_movimento
-        else:
-            for identificador in requisicao.identificadores_das_cargas:
-                armazem.empilhar(identificador, motor.cargas[identificador].quantidade)
 
         motor.energia.debitar(CENTRAL, total)
         for identificador in requisicao.identificadores_das_cargas:
@@ -802,7 +810,7 @@ async def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
     return {"aceito": True}
 ```
 
-**Atenção:** `reordenar` levanta se a ordem não for permutação, e o `executar()` roda dentro do `try` do motor, então a exceção vira `operacao_invalida` automaticamente. Mas as cargas já foram empilhadas nesse ponto: a exceção deixa a pilha alterada. Para o teste `test_nova_ordem_que_nao_e_permutacao_e_operacao_invalida` passar afirmando pilha vazia, **validar a permutação antes de empilhar**. Calcular a pilha resultante esperada (`armazem.pilha + identificadores_das_cargas`) e comparar com `sorted(nova_ordem)` antes de qualquer mutação; se divergir, levantar `ValueError` de cara.
+**Por que a validação vem antes de empilhar:** `executar()` roda dentro do `try` do motor, então qualquer exceção vira `operacao_invalida` e o tick sobrevive — mas o que já foi mutado antes da exceção **permanece mutado**. Validar depois de empilhar deixaria a pilha alterada por uma operação que o mundo registrou como inválida, que é a mesma classe de bug do débito de energia antes da validação corrigido em `extracao.py`. O teste `test_nova_ordem_que_nao_e_permutacao_e_operacao_invalida` afirma pilha vazia justamente para prender isso.
 
 - [ ] **Step 4: Rodar e ver passar**
 
