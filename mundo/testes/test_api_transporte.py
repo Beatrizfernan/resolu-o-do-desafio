@@ -487,7 +487,8 @@ def test_viagem_abortada_e_recebida_no_armazem_nao_reduz_a_degradacao_futura():
             motor.avancar_ciclo(motor.rotas["rota-1"].tempo_base)
             cliente.post("/armazenagem/receber-carga", json={
                 "identificador_do_armazem": "armazem-1",
-                "identificador_da_carga": "carga-1",
+                "identificadores_das_cargas": ["carga-1"],
+                "id_autorizacao": _autorizar(cliente, "receber_carga"),
             })
             motor.avancar_ciclo(1)
             # Só a perda dentro do armazém interessa aqui: o caminho até lá é

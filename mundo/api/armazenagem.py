@@ -51,7 +51,9 @@ async def reservar_espaco(requisicao: RequisicaoDeReserva) -> dict:
 
 class RequisicaoDeRecebimento(BaseModel):
     identificador_do_armazem: str
-    identificador_da_carga: str
+    identificadores_das_cargas: list[str]
+    nova_ordem: list[str] | None = None
+    id_autorizacao: str
 
 
 @router.post("/receber-carga")
@@ -60,28 +62,67 @@ async def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
     armazem = motor.armazens.get(requisicao.identificador_do_armazem)
     if armazem is None:
         raise HTTPException(status_code=404, detail="Armazém não encontrado")
-    carga = motor.cargas.get(requisicao.identificador_da_carga)
-    if carga is None:
-        raise HTTPException(status_code=404, detail="Carga não encontrada")
+    for identificador in requisicao.identificadores_das_cargas:
+        if identificador not in motor.cargas:
+            raise HTTPException(status_code=404, detail="Carga não encontrada")
 
     def executar() -> None:
-        if not armazem.compativel_com(carga.mineral):
-            motor.eventos.publicar(
-                "carga_contaminada",
-                motor.ciclo_atual,
-                {"carga": carga.identificador, "armazem": armazem.identificador},
-            )
-            raise ValueError("Mineral incompatível com o armazém")
-        motor.energia.debitar(CENTRAL, CUSTO_ENERGETICO_OPERACAO)
-        armazem.reservar_espaco(carga.quantidade)
-        carga.mover_para(LocalDaCarga.EM_ARMAZEM)
+        motor.autorizacoes.consumir(requisicao.id_autorizacao, "receber_carga")
+        custos = motor.catalogo_de_armazenagem
+        total = 0.0
+        for identificador in requisicao.identificadores_das_cargas:
+            carga = motor.cargas[identificador]
+            if not armazem.compativel_com(carga.mineral):
+                motor.eventos.publicar(
+                    "carga_contaminada",
+                    motor.ciclo_atual,
+                    {"carga": carga.identificador, "armazem": armazem.identificador},
+                )
+                raise ValueError("Mineral incompatível com o armazém")
+            total += carga.quantidade * custos.custo_de_armazenagem_por_unidade
+
+        # A ordem é validada ANTES de empilhar. `executar()` roda dentro do
+        # try do motor, então levantar aqui vira `operacao_invalida` — mas se
+        # as cargas já tivessem sido empilhadas, a pilha ficaria alterada por
+        # uma operação que o mundo registrou como inválida.
+        if requisicao.nova_ordem is not None:
+            pilha_resultante = armazem.pilha + list(requisicao.identificadores_das_cargas)
+            if sorted(requisicao.nova_ordem) != sorted(pilha_resultante):
+                raise ValueError(
+                    "A nova ordem precisa ser uma permutação exata da pilha resultante"
+                )
+
+        for identificador in requisicao.identificadores_das_cargas:
+            armazem.empilhar(identificador, motor.cargas[identificador].quantidade)
+
+        movimentos = 0
+        if requisicao.nova_ordem is not None:
+            movimentos = armazem.reordenar(requisicao.nova_ordem)
+            total += movimentos * custos.custo_por_movimento
+
+        motor.energia.debitar(CENTRAL, total)
+        for identificador in requisicao.identificadores_das_cargas:
+            motor.cargas[identificador].mover_para(LocalDaCarga.EM_ARMAZEM)
+
+        motor.eventos.publicar(
+            "cargas_armazenadas",
+            motor.ciclo_atual,
+            {
+                "armazem": armazem.identificador,
+                "cargas": list(requisicao.identificadores_das_cargas),
+                "movimentos": movimentos,
+                "custo": total,
+            },
+        )
         if armazem.ocupacao >= armazem.capacidade:
             motor.eventos.publicar(
                 "armazem_lotado", motor.ciclo_atual, {"armazem": armazem.identificador},
             )
         elif armazem.ocupacao >= armazem.capacidade * LIMIAR_PROXIMO_DA_CAPACIDADE:
             motor.eventos.publicar(
-                "armazem_proximo_da_capacidade", motor.ciclo_atual, {"armazem": armazem.identificador},
+                "armazem_proximo_da_capacidade",
+                motor.ciclo_atual,
+                {"armazem": armazem.identificador},
             )
 
     motor.enfileirar_comando(Comando("receber_carga", CENTRAL, requisicao.model_dump(), executar))

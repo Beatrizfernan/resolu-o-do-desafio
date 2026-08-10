@@ -5,6 +5,14 @@ from mundo.api.dependencias import instancia_do_mundo
 from mundo.dominio.cargas import CargaMineral
 
 
+def _autorizar(cliente) -> str:
+    resposta = cliente.post(
+        "/missao/autorizar-missao",
+        json={"operacao": "receber_carga", "central_solicitante": "armazenagem"},
+    )
+    return resposta.json()["id_autorizacao"]
+
+
 def _receber_carga(
     cliente,
     identificador_da_carga: str = "carga-1",
@@ -17,9 +25,11 @@ def _receber_carga(
     motor.cargas[identificador_da_carga] = CargaMineral(
         identificador_da_carga, mineral, quantidade, qualidade,
     )
+    motor.energia.alocar_energia("reserva_estrategica", "armazenagem", 200)
     return cliente.post("/armazenagem/receber-carga", json={
         "identificador_do_armazem": identificador_do_armazem,
-        "identificador_da_carga": identificador_da_carga,
+        "identificadores_das_cargas": [identificador_da_carga],
+        "id_autorizacao": _autorizar(cliente),
     })
 
 
@@ -62,7 +72,8 @@ def test_receber_carga_inexistente_retorna_404_e_nao_ocupa_espaco():
     with TestClient(app) as cliente:
         resposta = cliente.post("/armazenagem/receber-carga", json={
             "identificador_do_armazem": "armazem-1",
-            "identificador_da_carga": "carga-fantasma",
+            "identificadores_das_cargas": ["carga-fantasma"],
+            "id_autorizacao": _autorizar(cliente),
         })
         assert resposta.status_code == 404
         motor = instancia_do_mundo.obter_motor()
@@ -215,10 +226,12 @@ def test_receber_carga_normaliza_o_multiplicador_de_degradacao_do_local():
         motor.cargas["carga-1"] = CargaMineral(
             "carga-1", "hematita", 20.0, 90.0, mult_degradacao_local=0.5,
         )
+        motor.energia.alocar_energia("reserva_estrategica", "armazenagem", 200)
 
         cliente.post("/armazenagem/receber-carga", json={
             "identificador_do_armazem": "armazem-1",
-            "identificador_da_carga": "carga-1",
+            "identificadores_das_cargas": ["carga-1"],
+            "id_autorizacao": _autorizar(cliente),
         })
         motor.avancar_ciclo(1)
 
