@@ -120,8 +120,15 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
         if unidade.viagens_disponiveis <= 0:
             raise ValueError("Sem viagens disponíveis")
         carga = motor.cargas[requisicao.identificador_da_carga]
-        if carga.local != LocalDaCarga.NA_MAO:
-            raise ValueError("Só se transporta carga que está na mão")
+        # O que bloqueia é estar **guardado**, não estar fora da mão. Exigir
+        # NA_MAO tornaria o armazém etapa obrigatória: minério recém-extraído
+        # nasce EM_JAZIDA, e nenhum caminho leva de lá à mão sem passar por
+        # guardar e desenterrar. O armazém tem que ser escolha contra a
+        # alternativa de despachar direto — se toda produção fosse obrigada a
+        # passar por ele, o custo incidiria igual sobre qualquer estratégia e
+        # deixaria de distinguir uma da outra.
+        if carga.local in (LocalDaCarga.EM_ARMAZEM, LocalDaCarga.EM_TRANSITO):
+            raise ValueError("Só se transporta carga que não está guardada nem viajando")
         perfil = motor.catalogo_de_modos.obter_transporte(requisicao.modo)
         custo = (
             CUSTO_ENERGETICO_VIAGEM

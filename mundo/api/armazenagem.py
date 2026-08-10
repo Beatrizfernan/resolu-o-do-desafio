@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from mundo.dominio.armazens import CapacidadeExcedidaError
 from mundo.dominio.cargas import LocalDaCarga
 from mundo.motor.comandos import Comando
 
@@ -60,6 +61,20 @@ async def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
             if identificador in armazem.pilha:
                 raise ValueError(f"Carga já está no armazém: {identificador}")
             vistos.add(identificador)
+
+        # A capacidade é checada pelo volume do pedido inteiro, não carga a
+        # carga. `empilhar` levantaria na primeira que não coubesse, deixando as
+        # anteriores dentro da pilha — e o estrago aí não é só um rastro
+        # parcial: a carga fica empilhada e marcada `na_mao`, então pode ser
+        # entregue e sumir do mundo com o identificador ainda na pilha. A
+        # ocupação nunca mais é liberada e toda retirada seguinte morre
+        # procurando uma carga que não existe. O armazém fica inutilizável.
+        volume = sum(
+            motor.cargas[identificador].quantidade
+            for identificador in requisicao.identificadores_das_cargas
+        )
+        if armazem.ocupacao + volume > armazem.capacidade:
+            raise CapacidadeExcedidaError(armazem.identificador)
 
         total = 0.0
         for identificador in requisicao.identificadores_das_cargas:

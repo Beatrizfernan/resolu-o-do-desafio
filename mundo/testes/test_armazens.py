@@ -156,3 +156,21 @@ def test_desempilhar_com_mapa_incompleto_nao_altera_pilha_nem_ocupacao():
 
     assert armazem.pilha == ["c1", "c2", "c3"]
     assert armazem.ocupacao == 60.0
+
+
+def test_estouro_de_capacidade_nao_deixa_nada_na_pilha():
+    """`empilhar` valida antes de mutar, e isso precisa estar preso.
+
+    Trocar a ordem — anexar à pilha antes de reservar espaço — passava por
+    toda a suíte sem falhar. Sem esta asserção, a carga que não coube ficaria
+    na pilha sem ocupar espaço, e a pilha passaria a listar algo que o armazém
+    não tem.
+    """
+    armazem = Armazem("a1", capacidade=10.0, localizacao="setor-1", condicoes="normal")
+    armazem.empilhar("cabe", 8.0)
+
+    with pytest.raises(CapacidadeExcedidaError):
+        armazem.empilhar("nao_cabe", 5.0)
+
+    assert armazem.pilha == ["cabe"]
+    assert armazem.ocupacao == 8.0

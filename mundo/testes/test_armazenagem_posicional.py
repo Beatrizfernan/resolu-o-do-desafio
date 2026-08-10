@@ -453,3 +453,107 @@ def test_falha_de_energia_ao_guardar_nao_deixa_a_carga_meio_dentro_do_armazem():
         assert armazem.pilha == [], "a carga não pode ficar na pilha"
         assert armazem.ocupacao == 0.0, "a ocupação não pode contar o que não entrou"
         assert motor.cargas["c1"].local == LocalDaCarga.NA_MAO
+
+
+def test_minerio_extraido_chega_ao_faturamento_sem_passar_pelo_armazem():
+    """O armazém tem que ser escolha, não pedágio.
+
+    Nenhum teste percorria extração → transporte → entrega de ponta a ponta:
+    todos fabricavam a carga já na mão, direto em `motor.cargas`. Isso escondeu
+    que exigir `NA_MAO` tornava o armazém obrigatório — minério nasce
+    `EM_JAZIDA` e nenhum caminho leva de lá à mão sem guardar e desenterrar.
+
+    Se o armazém for etapa forçada, seu custo incide igual sobre toda
+    estratégia, e um fator uniforme não distingue estratégia nenhuma. Guardar
+    precisa competir com despachar direto.
+    """
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        for central in ("extracao", "transporte", "pesquisa"):
+            motor.energia.alocar_energia("reserva_estrategica", central, 100)
+        jazida = next(iter(motor.jazidas.values()))
+
+        cliente.post("/extracao/iniciar-extracao", json={
+            "identificador_da_unidade": "mineradora-1",
+            "identificador_da_jazida": jazida.identificador,
+            "quantidade": 2.0,
+        })
+        for _ in range(8):
+            motor.avancar_ciclo(1)
+
+        carga = next(iter(motor.cargas))
+        assert motor.cargas[carga].local == LocalDaCarga.EM_JAZIDA
+
+        autorizacao = cliente.post("/missao/autorizar-missao", json={
+            "operacao": "iniciar_viagem", "central_solicitante": "transporte",
+        }).json()["id_autorizacao"]
+        cliente.post("/transporte/iniciar-viagem", json={
+            "identificador_da_unidade": "transportadora-1",
+            "identificador_da_rota": "rota-1",
+            "identificador_da_carga": carga,
+            "id_autorizacao": autorizacao,
+        })
+        motor.avancar_ciclo(1)
+        assert motor.cargas[carga].local == LocalDaCarga.EM_TRANSITO, (
+            "minério extraído precisa poder viajar sem ter sido guardado"
+        )
+
+        for _ in range(12):
+            motor.avancar_ciclo(1)
+        faturamento_antes = motor.faturamento_total
+
+        autorizacao = cliente.post("/missao/autorizar-missao", json={
+            "operacao": "preparar_distribuicao", "central_solicitante": "pesquisa",
+        }).json()["id_autorizacao"]
+        cliente.post("/pesquisa/preparar-distribuicao", json={
+            "identificador_da_carga": carga,
+            "id_autorizacao": autorizacao,
+        })
+        motor.avancar_ciclo(1)
+
+        assert motor.faturamento_total > faturamento_antes, (
+            "a rota extração → transporte → entrega precisa fechar sem armazém"
+        )
+
+
+def test_pedido_que_estoura_a_capacidade_nao_deixa_nada_no_armazem():
+    """Estourar a capacidade no meio do lote inutilizava o armazém.
+
+    `empilhar` levantava na primeira carga que não coubesse, deixando as
+    anteriores dentro da pilha e ainda marcadas na mão. Como o mundo dizia
+    `na_mao`, elas podiam ser entregues e sumir — com o identificador ainda na
+    pilha e a ocupação nunca liberada. A partir daí toda retirada naquele
+    armazém morria procurando uma carga inexistente, e o armazém ficava
+    inutilizável para sempre.
+
+    Por isso a capacidade é checada pelo volume do pedido inteiro, antes de
+    empilhar qualquer coisa.
+    """
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "armazenagem", 300)
+        armazem = motor.armazens["armazem-1"]
+        metade_da_capacidade = armazem.capacidade * 0.6
+        for nome in ("c1", "c2"):
+            motor.cargas[nome] = CargaMineral(
+                nome, "hematita", metade_da_capacidade, 100.0, local=LocalDaCarga.NA_MAO,
+            )
+        invalidas = []
+        motor.eventos.assinar(
+            lambda e: invalidas.append(e) if e.tipo == "operacao_invalida" else None
+        )
+
+        cliente.post("/armazenagem/receber-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificadores_das_cargas": ["c1", "c2"],
+            "id_autorizacao": _autorizar(cliente),
+        })
+        motor.avancar_ciclo(1)
+
+        assert invalidas, "estourar a capacidade deveria publicar operacao_invalida"
+        assert armazem.pilha == [], "nada pode ter sido empilhado"
+        assert armazem.ocupacao == 0.0
+        for nome in ("c1", "c2"):
+            assert motor.cargas[nome].local == LocalDaCarga.NA_MAO
