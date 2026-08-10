@@ -27,7 +27,6 @@ CAMINHO_MODOS_PADRAO = Path(__file__).parent.parent / "config" / "modos.json"
 @dataclass
 class ConfiguracaoDaSimulacao:
     semente: int
-    duracao_maxima: int
     energia_total: int = 1000
     energia_inicial_por_central: int = 10
 
@@ -53,6 +52,7 @@ class MotorDeSimulacao:
             Path(__file__).parent.parent / "config" / "operacao.json"
         )
         self.ciclo_atual = 0
+        self.encerrada: bool = False
         self.rng = random.Random(configuracao.semente)
         self.energia = GerenciadorDeEnergia(
             CENTRAIS, configuracao.energia_inicial_por_central, configuracao.energia_total,
@@ -78,6 +78,8 @@ class MotorDeSimulacao:
 
     def avancar_ciclo(self, quantidade: int = 1) -> None:
         for _ in range(quantidade):
+            if self.encerrada:
+                return
             self._processar_um_ciclo()
 
     def _processar_um_ciclo(self) -> None:
@@ -109,6 +111,7 @@ class MotorDeSimulacao:
         self._recuperar_desgaste()
         self._cobrar_manutencao_dos_armazens()
         self._cobrar_consumo_das_centrais()
+        self._verificar_encerramento()
 
     def _degradar_cargas(self) -> None:
         for carga in self.cargas.values():
@@ -132,6 +135,41 @@ class MotorDeSimulacao:
         for robo in self.robos.values():
             if robo.estado == EstadoDoRobo.DISPONIVEL:
                 robo.desgaste = max(0.0, robo.desgaste - recuperacao)
+
+    def _verificar_encerramento(self) -> None:
+        """O fim é consequência do esgotamento, não constante escolhida.
+
+        Quando nenhuma central paga o próprio consumo, não há mais nada que o
+        mundo possa fazer: as dormentes não operam, e sem a missão ninguém
+        pode ser ressuscitado. Encerrar aqui também é o que garante que toda
+        execução termina, do que o Avaliador depende.
+
+        A energia encalhada é relatada porque é o placar do erro: quem deixou
+        a missão secar morre com a reserva quase intacta.
+        """
+        if self.encerrada:
+            return
+        # A condição é "todas dormentes", não "ninguém cobre o consumo". Uma
+        # central com menos que o consumo ainda entrega o resto no próximo
+        # ciclo e só então seca, e comparar saldo com consumo em float encerra
+        # um ciclo cedo: subtrações sucessivas deixam o saldo um fio abaixo do
+        # valor exato.
+        if any(self.energia.esta_operante(central) for central in CENTRAIS):
+            return
+        self.encerrada = True
+        encalhada = sum(
+            self.energia.consultar_energia(central)
+            for central in (*CENTRAIS, self.energia.RESERVA)
+        )
+        self.eventos.publicar(
+            tipo="simulacao_encerrada",
+            ciclo=self.ciclo_atual,
+            dados={
+                "ciclo": self.ciclo_atual,
+                "faturamento_total": self.faturamento_total,
+                "energia_encalhada": encalhada,
+            },
+        )
 
     def _cobrar_consumo_das_centrais(self) -> None:
         """Existir custa: cada central paga do próprio saldo, todo ciclo.

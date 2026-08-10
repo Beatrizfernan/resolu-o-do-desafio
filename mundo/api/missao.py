@@ -18,14 +18,14 @@ CAMINHO_CATALOGO = Path(__file__).parent.parent / "config" / "minerais.json"
 
 class RequisicaoDeResetarMundo(BaseModel):
     semente: int
-    duracao_maxima: int
+    duracao_maxima: int | None = None
 
 
 @router.post("/resetar-mundo")
 async def resetar_mundo(requisicao: RequisicaoDeResetarMundo) -> dict:
     catalogo = CatalogoDeMinerais.carregar_de_arquivo(CAMINHO_CATALOGO)
     instancia_do_mundo.inicializar(
-        ConfiguracaoDaSimulacao(semente=requisicao.semente, duracao_maxima=requisicao.duracao_maxima),
+        ConfiguracaoDaSimulacao(semente=requisicao.semente),
         catalogo,
     )
     return {"ciclo_atual": 0}
