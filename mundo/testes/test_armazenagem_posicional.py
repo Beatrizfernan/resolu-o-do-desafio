@@ -332,3 +332,31 @@ def test_endpoints_incoerentes_com_a_pilha_sumiram():
         for rota in ("liberar-carga", "realocar-carga", "reservar-espaco"):
             resposta = cliente.post(f"/armazenagem/{rota}", json={})
             assert resposta.status_code == 404, f"{rota} ainda existe"
+
+
+def test_nao_se_descarta_carga_que_ainda_esta_empilhada():
+    """Descartar só vale para o que está na mão.
+
+    Descartar carga empilhada a removeria de `motor.cargas` deixando o
+    identificador na pilha: o armazém passaria a apontar para uma carga que
+    não existe mais, e a ocupação nunca seria liberada. É a mesma divergência
+    entre conteúdo e contador que este sub-projeto existe para eliminar.
+    """
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = _preparar(cliente, {"c1": 10.0})
+        cliente.post("/armazenagem/receber-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificadores_das_cargas": ["c1"],
+            "id_autorizacao": _autorizar(cliente),
+        })
+        motor.avancar_ciclo(1)
+        assert motor.armazens["armazem-1"].pilha == ["c1"]
+
+        cliente.post("/armazenagem/descartar-carga", json={
+            "identificador_da_carga": "c1",
+        })
+        motor.avancar_ciclo(1)
+
+        assert "c1" in motor.cargas, "a carga não pode sumir enquanto está na pilha"
+        assert motor.armazens["armazem-1"].pilha == ["c1"]
