@@ -130,3 +130,19 @@ def test_alocar_ressuscita_central_dormente():
     energia.alocar_energia(GerenciadorDeEnergia.RESERVA, "extracao", 5.0)
 
     assert energia.esta_operante("extracao")
+
+
+def test_debitar_ate_o_saldo_recusa_quantidade_negativa():
+    """Silenciar um valor negativo creditaria energia.
+
+    O clamp que existia aqui tratava negativo como zero, o que esconde uma
+    configuração errada em vez de acusá-la: um consumo negativo passaria a
+    financiar a central. É a mesma máscara que `liberar_espaco` tinha e que
+    já foi trocada por uma exceção, pelo mesmo motivo.
+    """
+    energia = GerenciadorDeEnergia(["extracao"], energia_inicial_por_central=10)
+
+    with pytest.raises(ValueError):
+        energia.debitar_ate_o_saldo("extracao", -5.0)
+
+    assert energia.consultar_energia("extracao") == pytest.approx(10.0)

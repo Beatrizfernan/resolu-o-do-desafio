@@ -45,7 +45,9 @@ class GerenciadorDeEnergia:
         porque uma operação que não cabe no saldo tem mesmo que ser recusada.
         """
         self._validar_central(central)
-        debitado = min(max(0.0, quantidade), self._saldos[central])
+        if quantidade < 0.0:
+            raise ValueError(f"Consumo não pode ser negativo: {quantidade}")
+        debitado = min(quantidade, self._saldos[central])
         self._saldos[central] -= debitado
         return debitado
 
