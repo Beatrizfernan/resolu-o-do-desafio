@@ -236,3 +236,31 @@ def test_quem_nunca_reordena_continua_jogando():
         f"empilhar sem pensar rendeu {liquido:.2f}: guardar minério deixou de "
         f"valer a pena, então a armazenagem virou pedágio"
     )
+
+
+def test_a_recompensa_cresce_com_a_qualidade_da_estrategia():
+    """A cadeia inteira que a spec pede, num teste só.
+
+    Perda de valor > preço > empilhar sem pensar. Não basta que cada par se
+    ordene: a progressão é a afirmação, porque é ela que descreve o que o
+    projeto quer — estratégia simples funciona, estratégia melhor funciona
+    melhor, e nenhuma é obrigatória.
+
+    As margens são desiguais de propósito e vale saber quais são: reordenar em
+    vez de empilhar às cegas rende ~2.2%, enquanto trocar a chave de preço para
+    perda rende ~0.025%. O degrau grande é decidir organizar; o pequeno é
+    escolher por qual critério.
+    """
+    entrega = _ordem_de_entrega()
+    por_preco = sorted(
+        SORTIMENTO, key=lambda n: MINERAIS.obter(n).valor_por_unidade, reverse=True,
+    )
+
+    perda = _operar(list(reversed(entrega)), entrega)
+    preco = _operar(list(reversed(por_preco)), por_preco)
+    sem_reordenar = _operar(list(SORTIMENTO), entrega)
+
+    assert perda > preco > sem_reordenar, (
+        f"a progressão quebrou: perda={perda:.2f}, preço={preco:.2f}, "
+        f"sem reordenar={sem_reordenar:.2f}"
+    )

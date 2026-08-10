@@ -592,3 +592,30 @@ def test_consultar_armazens_expoe_a_ordem_da_pilha():
         assert armazem["pilha"] == ["c3", "c1", "c2"], (
             "o GET precisa devolver a ordem real da pilha, do fundo para o topo"
         )
+
+
+def test_carga_inexistente_devolve_404_em_vez_de_operacao_invalida():
+    """Pedir carga que não existe é erro do chamador, não do mundo.
+
+    `receber-carga` já validava; as outras três deixavam o `KeyError` cru
+    virar `operacao_invalida` no ciclo seguinte. Do lado de quem chama, os dois
+    casos ficavam indistinguíveis: um id digitado errado parecia uma regra do
+    mundo tendo sido violada.
+    """
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        pedidos = {
+            "retirar-carga": {
+                "identificador_do_armazem": "armazem-1",
+                "identificador_da_carga": "fantasma",
+                "id_autorizacao": _autorizar(cliente, "retirar_carga"),
+            },
+            "descartar-carga": {"identificador_da_carga": "fantasma"},
+            "solicitar-transporte": {
+                "identificador_da_carga": "fantasma",
+                "id_autorizacao": _autorizar(cliente, "solicitar_transporte"),
+            },
+        }
+        for rota, corpo in pedidos.items():
+            resposta = cliente.post(f"/armazenagem/{rota}", json=corpo)
+            assert resposta.status_code == 404, f"{rota} devolveu {resposta.status_code}"

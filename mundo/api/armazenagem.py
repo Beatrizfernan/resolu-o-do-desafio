@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from mundo.dominio.armazens import CapacidadeExcedidaError
+from mundo.dominio.armazens import CapacidadeExcedidaError, deslocamento_entre
 from mundo.dominio.cargas import LocalDaCarga
 from mundo.motor.comandos import Comando
 
@@ -104,17 +104,9 @@ async def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
         pilha_resultante = armazem.pilha + list(requisicao.identificadores_das_cargas)
         movimentos = 0
         if requisicao.nova_ordem is not None:
-            if sorted(requisicao.nova_ordem) != sorted(pilha_resultante):
-                raise ValueError(
-                    "A nova ordem precisa ser uma permutação exata da pilha resultante"
-                )
             # O deslocamento é aritmética pura sobre a pilha que ainda não
             # existe, justamente para o preço ser conhecido antes de mexer nela.
-            posicao_futura = {nome: i for i, nome in enumerate(pilha_resultante)}
-            movimentos = sum(
-                abs(i - posicao_futura[nome])
-                for i, nome in enumerate(requisicao.nova_ordem)
-            )
+            movimentos = deslocamento_entre(pilha_resultante, requisicao.nova_ordem)
             total += movimentos * custos.custo_por_movimento
 
         motor.energia.debitar(CENTRAL, total)
@@ -163,6 +155,8 @@ async def retirar_carga(requisicao: RequisicaoDeRetirada) -> dict:
     armazem = motor.armazens.get(requisicao.identificador_do_armazem)
     if armazem is None:
         raise HTTPException(status_code=404, detail="Armazém não encontrado")
+    if requisicao.identificador_da_carga not in motor.cargas:
+        raise HTTPException(status_code=404, detail="Carga não encontrada")
 
     def executar() -> None:
         motor.autorizacoes.consumir(requisicao.id_autorizacao, "retirar_carga")
@@ -205,6 +199,8 @@ class RequisicaoDeDescarte(BaseModel):
 @router.post("/descartar-carga")
 async def descartar_carga(requisicao: RequisicaoDeDescarte) -> dict:
     motor = obter_motor()
+    if requisicao.identificador_da_carga not in motor.cargas:
+        raise HTTPException(status_code=404, detail="Carga não encontrada")
 
     def executar() -> None:
         carga = motor.cargas[requisicao.identificador_da_carga]
@@ -225,6 +221,8 @@ class RequisicaoDeSolicitacaoDeTransporte(BaseModel):
 @router.post("/solicitar-transporte")
 async def solicitar_transporte(requisicao: RequisicaoDeSolicitacaoDeTransporte) -> dict:
     motor = obter_motor()
+    if requisicao.identificador_da_carga not in motor.cargas:
+        raise HTTPException(status_code=404, detail="Carga não encontrada")
 
     def executar() -> None:
         motor.autorizacoes.consumir(requisicao.id_autorizacao, "solicitar_transporte")

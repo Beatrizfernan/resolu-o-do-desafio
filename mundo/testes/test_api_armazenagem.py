@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
-from mundo.dominio.cargas import CargaMineral
+from mundo.dominio.cargas import CargaMineral, LocalDaCarga
 
 
 def _autorizar(cliente, operacao: str = "receber_carga") -> str:
@@ -125,6 +125,9 @@ def test_descartar_carga_remove_a_carga_e_libera_espaco():
 def test_solicitar_transporte_exige_autorizacao_valida():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
+        instancia_do_mundo.obter_motor().cargas["carga-1"] = CargaMineral(
+            "carga-1", "hematita", 10.0, 100.0, local=LocalDaCarga.NA_MAO,
+        )
         resposta = cliente.post("/missao/autorizar-missao", json={
             "operacao": "solicitar_transporte", "central_solicitante": "armazenagem",
         })
@@ -141,6 +144,12 @@ def test_solicitar_transporte_exige_autorizacao_valida():
 def test_solicitar_transporte_rejeita_reuso_da_mesma_autorizacao():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
+        # As duas cargas existem para que o que se teste seja o reuso da
+        # autorização, e não a rota recusando um identificador inventado.
+        for nome in ("carga-1", "carga-2"):
+            instancia_do_mundo.obter_motor().cargas[nome] = CargaMineral(
+                nome, "hematita", 10.0, 100.0, local=LocalDaCarga.NA_MAO,
+            )
         resposta = cliente.post("/missao/autorizar-missao", json={
             "operacao": "solicitar_transporte", "central_solicitante": "armazenagem",
         })
@@ -165,6 +174,9 @@ def test_solicitar_transporte_rejeita_reuso_da_mesma_autorizacao():
 def test_solicitar_transporte_rejeita_autorizacao_inexistente():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
+        instancia_do_mundo.obter_motor().cargas["carga-1"] = CargaMineral(
+            "carga-1", "hematita", 10.0, 100.0, local=LocalDaCarga.NA_MAO,
+        )
         cliente.post("/armazenagem/solicitar-transporte", json={
             "identificador_da_carga": "carga-1", "id_autorizacao": "aut-inexistente",
         })

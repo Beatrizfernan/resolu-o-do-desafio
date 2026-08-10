@@ -4,6 +4,7 @@ from mundo.dominio.armazens import (
     Armazem,
     CapacidadeExcedidaError,
     CargaNaoEstaNoArmazemError,
+    OcupacaoInconsistenteError,
 )
 
 
@@ -19,11 +20,43 @@ def test_reservar_alem_da_capacidade_lanca_erro():
         armazem.reservar_espaco(20.0)
 
 
-def test_liberar_espaco_reduz_ocupacao_sem_ir_negativo():
+def test_liberar_espaco_reduz_a_ocupacao():
     armazem = Armazem(identificador="a1", capacidade=100.0, localizacao="setor-1", condicoes="normal")
     armazem.reservar_espaco(10.0)
-    armazem.liberar_espaco(50.0)
-    assert armazem.ocupacao == 0.0
+    armazem.liberar_espaco(4.0)
+    assert armazem.ocupacao == 6.0
+
+
+def test_liberar_mais_do_que_esta_ocupado_levanta_em_vez_de_zerar():
+    """Antes isto era silenciado por um `max(0.0, ...)`.
+
+    Liberar mais do que se tem só pode significar que pilha e ocupação já
+    divergiram. O clamp escondia isso zerando o contador, e foi essa classe de
+    máscara que deixou o defeito original passar — a ocupação mentia e nada
+    reclamava. Agora ela levanta.
+    """
+    armazem = Armazem(identificador="a1", capacidade=100.0, localizacao="setor-1", condicoes="normal")
+    armazem.reservar_espaco(10.0)
+
+    with pytest.raises(OcupacaoInconsistenteError):
+        armazem.liberar_espaco(50.0)
+
+    assert armazem.ocupacao == 10.0, "a ocupação não pode mudar numa liberação recusada"
+
+
+def test_liberar_espaco_tolera_ruido_de_ponto_flutuante():
+    """Volumes fracionários somados e subtraídos não fecham exatamente.
+
+    A guarda acima existe para divergência real, não para o último bit de um
+    float — senão uma operação legítima passaria a falhar.
+    """
+    armazem = Armazem(identificador="a1", capacidade=100.0, localizacao="setor-1", condicoes="normal")
+    for _ in range(3):
+        armazem.reservar_espaco(0.1)
+
+    armazem.liberar_espaco(0.3)
+
+    assert armazem.ocupacao == pytest.approx(0.0)
 
 
 def test_compativel_com_vazio_aceita_qualquer_mineral():
