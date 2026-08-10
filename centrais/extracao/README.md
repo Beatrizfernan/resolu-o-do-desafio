@@ -1,47 +1,15 @@
 # Central de Extracao
 
-Sua responsabilidade e transformar jazidas em cargas exploraveis pelo restante da operacao.
+Esta central consulta jazidas e agenda operacoes de extracao por unidade mineradora.
 
-## O que esta central controla
+## Dependencias desta central
 
-- escolha da unidade mineradora;
-- escolha da jazida;
-- quantidade a ser extraida;
-- modo de extracao.
+- depende de energia previamente alocada pela Missao;
+- gera cargas que depois pressionam Transporte, Armazenagem e Pesquisa;
+- nao revela qualidade final da carga;
+- conclui operacoes por evento futuro, nao na resposta HTTP.
 
-## O que voce consegue observar
-
-- lista de jazidas e seus identificadores;
-- mineral predominante de cada jazida;
-- quantidade restante;
-- dificuldade de extracao;
-- risco da jazida;
-- estado das unidades mineradoras.
-
-## O que voce nao sabe daqui
-
-- qualidade final da carga antes da Pesquisa analisar;
-- estimativa de composicao da jazida antes de a Pesquisa sondar;
-- se o Transporte vai conseguir preservar bem a carga depois.
-
-## Vantagens
-
-- e a porta de entrada do faturamento;
-- permite acelerar ou segurar a producao conforme energia, desgaste e gargalos seguintes.
-
-## Desvantagens e cuidados
-
-- desgaste dos robos cresce com a operacao;
-- modos mais agressivos podem custar mais energia e castigar mais a unidade;
-- extrair demais sem coordenação pode saturar Pesquisa, Transporte ou Armazenagem.
-
-## Estrategias validas
-
-- modular o ritmo de extracao para nao inundar o sistema;
-- priorizar jazidas cujo mineral predominante pareca compativel com a janela atual de energia e transporte;
-- combinar o que a Missao sabe sobre saldo com o que a Pesquisa descobriu sobre composicao.
-
-## APIs mais importantes
+## Endpoints implementados hoje
 
 - `GET /extracao/jazidas`
 - `GET /extracao/jazidas/{identificador}`
@@ -49,8 +17,259 @@ Sua responsabilidade e transformar jazidas em cargas exploraveis pelo restante d
 - `POST /extracao/interromper-extracao`
 - `POST /extracao/retornar-unidade`
 
-## Armadilhas do dominio
+## Consultar jazidas
 
-- operacao invalida continua custando ciclo e coordenação;
-- jazidas esvaziadas ficam mais caras de explorar indiretamente pela escassez;
-- uma carga extraida no momento errado pode degradar antes de achar destino.
+`GET /extracao/jazidas`
+
+Response JSON:
+
+```json
+[
+  {
+    "identificador": "jazida-1",
+    "mineral": "hematita",
+    "estado": "disponivel",
+    "quantidade_disponivel": 120.0
+  }
+]
+```
+
+Python com `requests`:
+
+```python
+import requests
+
+BASE_URL = "http://localhost:8000"
+
+resposta = requests.get(f"{BASE_URL}/extracao/jazidas")
+resposta.raise_for_status()
+print(resposta.json())
+```
+
+## Inspecionar uma jazida
+
+`GET /extracao/jazidas/{identificador}`
+
+Response JSON:
+
+```json
+{
+  "identificador": "jazida-1",
+  "localizacao": "setor-1",
+  "mineral": "hematita",
+  "quantidade_disponivel": 120.0,
+  "dificuldade_extracao": 1.0,
+  "risco": 0.2,
+  "estado": "disponivel"
+}
+```
+
+Python com `requests`:
+
+```python
+import requests
+
+BASE_URL = "http://localhost:8000"
+
+resposta = requests.get(f"{BASE_URL}/extracao/jazidas/jazida-1")
+resposta.raise_for_status()
+print(resposta.json())
+```
+
+Se a jazida nao existir, a API responde `404` com `{"detail": "Jazida não encontrada"}`.
+
+## Iniciar extracao
+
+`POST /extracao/iniciar-extracao`
+
+Request JSON:
+
+```json
+{
+  "identificador_da_unidade": "mineradora-1",
+  "identificador_da_jazida": "jazida-1",
+  "quantidade": 20,
+  "modo": "normal"
+}
+```
+
+Campos aceitos:
+
+- `identificador_da_unidade`: unidade mineradora usada na operacao.
+- `identificador_da_jazida`: jazida consumida pela operacao.
+- `quantidade`: quantidade solicitada para a carga.
+- `modo`: `cuidadoso`, `normal` ou `agressivo`. Quando omitido, o default e `normal`.
+
+Response JSON imediata:
+
+```json
+{
+  "aceito": true
+}
+```
+
+Python com `requests`:
+
+```python
+import requests
+
+BASE_URL = "http://localhost:8000"
+
+resposta = requests.post(f"{BASE_URL}/extracao/iniciar-extracao", json={
+    "identificador_da_unidade": "mineradora-1",
+    "identificador_da_jazida": "jazida-1",
+    "quantidade": 20,
+    "modo": "normal",
+})
+resposta.raise_for_status()
+print(resposta.json())
+```
+
+O `200` com `{"aceito": true}` significa apenas que o comando foi enfileirado. A operacao real depende de energia disponivel para a central e e concluida em ciclo futuro.
+
+Validacoes implementadas durante a execucao do comando:
+
+- a central precisa estar operante na energia;
+- a unidade precisa estar `disponivel`;
+- a jazida precisa estar `disponivel`;
+- o consumo previsto da jazida precisa caber no saldo atual.
+
+Se a unidade ou a jazida nao existirem, a API responde `404` com `{"detail": "Unidade ou jazida não encontrada"}`.
+
+## Interromper extracao
+
+`POST /extracao/interromper-extracao`
+
+Request JSON:
+
+```json
+{
+  "identificador_da_unidade": "mineradora-1"
+}
+```
+
+Response JSON:
+
+```json
+{
+  "aceito": true
+}
+```
+
+Python com `requests`:
+
+```python
+import requests
+
+BASE_URL = "http://localhost:8000"
+
+resposta = requests.post(f"{BASE_URL}/extracao/interromper-extracao", json={
+    "identificador_da_unidade": "mineradora-1"
+})
+resposta.raise_for_status()
+print(resposta.json())
+```
+
+No ciclo em que o comando for processado, a unidade passa para `retornando`. Quando a conclusao agendada da extracao acontecer, o motor publica `extracao_interrompida` em vez de criar carga.
+
+Se a unidade nao existir, a API responde `404` com `{"detail": "Unidade não encontrada"}`.
+
+## Retornar unidade
+
+`POST /extracao/retornar-unidade`
+
+Request JSON:
+
+```json
+{
+  "identificador_da_unidade": "mineradora-1"
+}
+```
+
+Response JSON:
+
+```json
+{
+  "aceito": true
+}
+```
+
+Python com `requests`:
+
+```python
+import requests
+
+BASE_URL = "http://localhost:8000"
+
+resposta = requests.post(f"{BASE_URL}/extracao/retornar-unidade", json={
+    "identificador_da_unidade": "mineradora-1"
+})
+resposta.raise_for_status()
+print(resposta.json())
+```
+
+No ciclo em que o comando for processado, a unidade passa para `disponivel`.
+
+## Conclusao assincrona
+
+A extracao nao termina na resposta HTTP. O fluxo implementado hoje e:
+
+1. `POST /extracao/iniciar-extracao` enfileira o comando e responde `{"aceito": true}`.
+2. No ciclo em que o comando e processado, a energia e debitada e a unidade passa para `executando`.
+3. A conclusao e agendada para um ciclo futuro com base na duracao do modo.
+4. Na conclusao, o motor publica um evento.
+
+Efeitos de conclusao implementados hoje:
+
+- se a unidade ainda estiver `executando`, a jazida e consumida, a unidade vai para `aguardando` e uma carga e criada em `em_jazida`;
+- se a unidade nao estiver mais `executando`, nenhuma carga e criada e o evento publicado e `extracao_interrompida`.
+
+## Eventos e webhooks
+
+Os eventos desta central seguem o envelope padrao do mundo com `identificador`, `tipo`, `ciclo` e `dados`. Eles podem ser observados por polling em Missao e tambem pelos webhooks registrados na central de Missao.
+
+### Evento `extracao_concluida`
+
+Payload:
+
+```json
+{
+  "identificador": "evt-123",
+  "tipo": "extracao_concluida",
+  "ciclo": 12,
+  "dados": {
+    "unidade": "mineradora-1",
+    "jazida": "jazida-1",
+    "quantidade": 20,
+    "quantidade_consumida_da_jazida": 20,
+    "modo": "normal",
+    "carga": "carga-jazida-1-mineradora-1-12",
+    "desgaste_da_unidade": 1.0
+  }
+}
+```
+
+Campos relevantes em `dados`:
+
+- `quantidade`: quantidade entregue na carga criada.
+- `quantidade_consumida_da_jazida`: quanto a jazida perdeu de fato, considerando o desperdicio do modo.
+- `carga`: identificador da carga criada para Transporte, Armazenagem e Pesquisa.
+- `desgaste_da_unidade`: desgaste acumulado da unidade apos a operacao.
+
+### Evento `extracao_interrompida`
+
+Payload:
+
+```json
+{
+  "identificador": "evt-124",
+  "tipo": "extracao_interrompida",
+  "ciclo": 12,
+  "dados": {
+    "unidade": "mineradora-1",
+    "jazida": "jazida-1"
+  }
+}
+```
+
+Esse evento indica que a conclusao agendada chegou, mas a unidade ja nao estava em `executando`.
