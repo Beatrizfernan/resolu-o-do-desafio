@@ -4,6 +4,7 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 
+from mundo.dominio.armazenagem import CatalogoDeArmazenagem
 from mundo.dominio.armazens import Armazem
 from mundo.dominio.autorizacao import RegistroDeAutorizacoes
 from mundo.dominio.cargas import CargaMineral, LocalDaCarga
@@ -36,11 +37,15 @@ class MotorDeSimulacao:
         configuracao: ConfiguracaoDaSimulacao,
         catalogo_de_minerais: CatalogoDeMinerais,
         catalogo_de_modos: CatalogoDeModos | None = None,
+        catalogo_de_armazenagem: CatalogoDeArmazenagem | None = None,
     ) -> None:
         self.configuracao = configuracao
         self.catalogo_de_minerais = catalogo_de_minerais
         self.catalogo_de_modos = catalogo_de_modos or CatalogoDeModos.carregar_de_arquivo(
             CAMINHO_MODOS_PADRAO,
+        )
+        self.catalogo_de_armazenagem = catalogo_de_armazenagem or CatalogoDeArmazenagem.carregar_de_arquivo(
+            Path(__file__).parent.parent / "config" / "armazenagem.json"
         )
         self.ciclo_atual = 0
         self.rng = random.Random(configuracao.semente)
@@ -97,6 +102,7 @@ class MotorDeSimulacao:
             )
         self._degradar_cargas()
         self._recuperar_desgaste()
+        self._cobrar_manutencao_dos_armazens()
 
     def _degradar_cargas(self) -> None:
         for carga in self.cargas.values():
@@ -120,6 +126,26 @@ class MotorDeSimulacao:
         for robo in self.robos.values():
             if robo.estado == EstadoDoRobo.DISPONIVEL:
                 robo.desgaste = max(0.0, robo.desgaste - recuperacao)
+
+    def _cobrar_manutencao_dos_armazens(self) -> None:
+        """Guardar minério custa energia a cada ciclo, proporcional ao volume.
+
+        A cobrança nunca derruba o tick: sem saldo, publica-se o evento e a
+        simulação segue. Travar o mundo por dívida de manutenção seria pior
+        que deixá-lo endividado.
+        """
+        total = sum(armazem.ocupacao for armazem in self.armazens.values())
+        if total <= 0.0:
+            return
+        custo = total * self.catalogo_de_armazenagem.custo_de_manutencao_por_unidade
+        try:
+            self.energia.debitar("armazenagem", custo)
+        except Exception as erro:
+            self.eventos.publicar(
+                tipo="armazem_sem_energia",
+                ciclo=self.ciclo_atual,
+                dados={"custo": custo, "motivo": str(erro)},
+            )
 
     def _gerar_mundo_inicial(self) -> None:
         contador_jazidas = 1
