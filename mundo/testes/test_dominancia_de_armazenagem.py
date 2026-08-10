@@ -126,14 +126,26 @@ def test_guardar_na_ordem_de_entrega_rende_mais_que_guardar_contra_ela():
     retirada. Quem empilha ao contrário desenterra a pilha inteira na primeira
     entrega, paga o desempilhamento, e ainda rearmazena o que veio junto.
 
-    Medido: a ordem certa rende cerca de 5% a mais. O que carrega essa
-    diferença é o **custo de rearmazenar**, não o de desempilhar — zerando
-    `custo_de_armazenagem_por_unidade` a margem cai para 0.2%, enquanto zerando
-    `custo_por_desempilhamento` ela ainda fica em 4.9%. Faz sentido: quem
-    guardou errado desenterra quatro cargas para entregar uma e paga
-    armazenagem pelas três que voltam, toda vez. Com os quatro custos em zero a
-    margem é exatamente 0.000%, o que confirma que é o modelo de custo — e não
-    algum artefato do cenário — que cria a decisão.
+    Medido: 2925.76 contra 2780.86, margem de 144.90 (5.21%).
+
+    O que carrega essa margem é a **degradação**, não os quatro custos. Baixando
+    os quatro ao mínimo que ainda não degenera o cenário (0.0001, 0, 0, 0) a
+    margem continua em 133.91 (4.79%) — ou seja, 92% dela é só o minério
+    sangrando valor enquanto está enterrado, e o modelo de custo responde por
+    uns 11. Dentro desses 11, desempilhar pesa ~8 (zerá-lo leva a margem a
+    136.90) e rearmazenar pesa ~5 (baixar `custo_de_armazenagem_por_unidade`
+    para 0.001 leva a 140.00).
+
+    Vale registrar por que não se mede isso com os custos em zero: `debitar`
+    rejeita quantidade não-positiva, então `custo_de_armazenagem_por_unidade`
+    igual a zero derruba o próprio `receber_carga` e o cenário colapsa nos dois
+    braços — dá 0.000% de margem por não estar medindo nada, não por o modelo
+    de custo ser neutro.
+
+    `custo_de_manutencao_por_unidade` é a alavanca perigosa: em 0.2 a margem cai
+    para 1.70% e em 0.5 ela **inverte** (-3.81%), porque manutenção cobra por
+    volume parado e pune quem guarda, não quem guarda errado. O valor de linha
+    de base (0.004) está com folga confortável desse limite.
     """
     entrega = _ordem_de_entrega()
     liquido_certo = _operar(list(reversed(entrega)), entrega)
