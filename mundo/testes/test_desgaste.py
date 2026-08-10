@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
-from mundo.dominio.cargas import CargaMineral
+from mundo.dominio.cargas import CargaMineral, LocalDaCarga
 from mundo.dominio.minerais import CatalogoDeMinerais
 from mundo.dominio.modos import ModoDeExtracao, ModoDeTransporte
 from mundo.dominio.robos import EstadoDoRobo
@@ -127,7 +127,7 @@ def test_transportadora_desgastada_paga_mais_pela_mesma_viagem():
         app = criar_app(com_loop_real_time=False)
         with TestClient(app) as cliente:
             motor = instancia_do_mundo.obter_motor()
-            motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+            motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
             motor.energia.alocar_energia("reserva_estrategica", "transporte", 500)
             motor.robos["transportadora-1"].desgaste = desgaste_inicial
             antes = motor.energia.consultar_energia("transporte")
@@ -152,7 +152,7 @@ def test_viagem_acumula_desgaste_na_transportadora():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
         motor.energia.alocar_energia("reserva_estrategica", "transporte", 500)
         unidade = motor.robos["transportadora-1"]
         perfil = motor.catalogo_de_modos.obter_transporte(ModoDeTransporte.NORMAL)
@@ -177,7 +177,7 @@ def _desgaste_de_uma_viagem(modo: str) -> tuple[float, float, float]:
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
         motor.energia.alocar_energia("reserva_estrategica", "transporte", 500)
         unidade = motor.robos["transportadora-1"]
 

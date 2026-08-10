@@ -119,6 +119,16 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
             raise ValueError("Rota interditada")
         if unidade.viagens_disponiveis <= 0:
             raise ValueError("Sem viagens disponíveis")
+        carga = motor.cargas[requisicao.identificador_da_carga]
+        # O que bloqueia é estar **guardado**, não estar fora da mão. Exigir
+        # NA_MAO tornaria o armazém etapa obrigatória: minério recém-extraído
+        # nasce EM_JAZIDA, e nenhum caminho leva de lá à mão sem passar por
+        # guardar e desenterrar. O armazém tem que ser escolha contra a
+        # alternativa de despachar direto — se toda produção fosse obrigada a
+        # passar por ele, o custo incidiria igual sobre qualquer estratégia e
+        # deixaria de distinguir uma da outra.
+        if carga.local in (LocalDaCarga.EM_ARMAZEM, LocalDaCarga.EM_TRANSITO):
+            raise ValueError("Só se transporta carga que não está guardada nem viajando")
         perfil = motor.catalogo_de_modos.obter_transporte(requisicao.modo)
         custo = (
             CUSTO_ENERGETICO_VIAGEM
@@ -131,7 +141,6 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
         unidade.desgaste += motor.catalogo_de_modos.taxa_de_desgaste / perfil.mult_duracao
         unidade.viagens_disponiveis -= 1
         unidade.estado = EstadoDoRobo.EXECUTANDO
-        carga = motor.cargas[requisicao.identificador_da_carga]
         local_de_origem = carga.local
         carga.mover_para(LocalDaCarga.EM_TRANSITO, perfil.mult_degradacao)
         duracao = max(1, round(rota.tempo_base * perfil.mult_duracao))
@@ -155,7 +164,7 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
                 )
                 return
             carga_em_transito = motor.cargas[requisicao.identificador_da_carga]
-            carga_em_transito.mover_para(LocalDaCarga.EM_ARMAZEM)
+            carga_em_transito.mover_para(LocalDaCarga.NA_MAO)
             unidade.estado = EstadoDoRobo.RETORNANDO
             motor.eventos.publicar(
                 "transporte_concluido",

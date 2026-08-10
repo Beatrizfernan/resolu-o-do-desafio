@@ -15,28 +15,28 @@ class GerenciadorDeEnergia:
     def __init__(
         self,
         centrais: list[str],
-        energia_inicial_por_central: int = 10,
-        energia_total: int = 1000,
+        energia_inicial_por_central: float = 10,
+        energia_total: float = 1000,
     ) -> None:
         saldo_inicial_centrais = energia_inicial_por_central * len(centrais)
-        self._saldos: dict[str, int] = {central: energia_inicial_por_central for central in centrais}
+        self._saldos: dict[str, float] = {central: energia_inicial_por_central for central in centrais}
         self._saldos[self.RESERVA] = energia_total - saldo_inicial_centrais
 
-    def consultar_energia(self, central: str) -> int:
+    def consultar_energia(self, central: str) -> float:
         self._validar_central(central)
         return self._saldos[central]
 
-    def alocar_energia(self, origem: str, destino: str, quantidade: int) -> None:
+    def alocar_energia(self, origem: str, destino: str, quantidade: float) -> None:
         self._validar_quantidade(quantidade)
         if origem != self.RESERVA:
             raise PermissionError("Somente a Central de Missão pode alocar a partir da reserva")
         self._transferir(origem, destino, quantidade)
 
-    def redistribuir_energia(self, origem: str, destino: str, quantidade: int) -> None:
+    def redistribuir_energia(self, origem: str, destino: str, quantidade: float) -> None:
         self._validar_quantidade(quantidade)
         self._transferir(origem, destino, quantidade)
 
-    def revogar_energia(self, central: str, quantidade: int) -> None:
+    def revogar_energia(self, central: str, quantidade: float) -> None:
         self._validar_quantidade(quantidade)
         self._validar_central(central)
         if self._saldos[central] < quantidade:
@@ -44,14 +44,14 @@ class GerenciadorDeEnergia:
         self._saldos[central] -= quantidade
         self._saldos[self.RESERVA] += quantidade
 
-    def debitar(self, central: str, quantidade: int) -> None:
+    def debitar(self, central: str, quantidade: float) -> None:
         self._validar_quantidade(quantidade)
         self._validar_central(central)
         if self._saldos[central] < quantidade:
             raise EnergiaInsuficienteError(central)
         self._saldos[central] -= quantidade
 
-    def _transferir(self, origem: str, destino: str, quantidade: int) -> None:
+    def _transferir(self, origem: str, destino: str, quantidade: float) -> None:
         self._validar_central(origem)
         self._validar_central(destino)
         if self._saldos[origem] < quantidade:
@@ -63,6 +63,6 @@ class GerenciadorDeEnergia:
         if central not in self._saldos:
             raise CentralDesconhecidaError(central)
 
-    def _validar_quantidade(self, quantidade: int) -> None:
+    def _validar_quantidade(self, quantidade: float) -> None:
         if quantidade <= 0:
             raise ValueError("Quantidade deve ser positiva")

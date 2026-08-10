@@ -2,7 +2,15 @@ from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
-from mundo.dominio.cargas import CargaMineral
+from mundo.dominio.cargas import CargaMineral, LocalDaCarga
+
+
+def _autorizar(cliente, operacao: str = "receber_carga") -> str:
+    resposta = cliente.post(
+        "/missao/autorizar-missao",
+        json={"operacao": operacao, "central_solicitante": "armazenagem"},
+    )
+    return resposta.json()["id_autorizacao"]
 
 
 def _receber_carga(
@@ -17,9 +25,11 @@ def _receber_carga(
     motor.cargas[identificador_da_carga] = CargaMineral(
         identificador_da_carga, mineral, quantidade, qualidade,
     )
+    motor.energia.alocar_energia("reserva_estrategica", "armazenagem", 200)
     return cliente.post("/armazenagem/receber-carga", json={
         "identificador_do_armazem": identificador_do_armazem,
-        "identificador_da_carga": identificador_da_carga,
+        "identificadores_das_cargas": [identificador_da_carga],
+        "id_autorizacao": _autorizar(cliente),
     })
 
 
@@ -62,7 +72,8 @@ def test_receber_carga_inexistente_retorna_404_e_nao_ocupa_espaco():
     with TestClient(app) as cliente:
         resposta = cliente.post("/armazenagem/receber-carga", json={
             "identificador_do_armazem": "armazem-1",
-            "identificador_da_carga": "carga-fantasma",
+            "identificadores_das_cargas": ["carga-fantasma"],
+            "id_autorizacao": _autorizar(cliente),
         })
         assert resposta.status_code == 404
         motor = instancia_do_mundo.obter_motor()
@@ -88,54 +99,23 @@ def test_receber_carga_publica_armazem_lotado():
         assert "armazem_lotado" in _tipos_de_eventos(motor)
 
 
-def test_reservar_espaco_aumenta_a_ocupacao():
-    app = criar_app(com_loop_real_time=False)
-    with TestClient(app) as cliente:
-        cliente.post("/armazenagem/reservar-espaco", json={
-            "identificador_do_armazem": "armazem-1", "quantidade": 30.0,
-        })
-        motor = instancia_do_mundo.obter_motor()
-        motor.avancar_ciclo(1)
-        assert motor.armazens["armazem-1"].ocupacao == 30.0
-
-
-def test_realocar_carga_transfere_ocupacao_entre_armazens():
-    app = criar_app(com_loop_real_time=False)
-    with TestClient(app) as cliente:
-        _receber_carga(cliente, quantidade=25.0)
-        cliente.post("/armazenagem/realocar-carga", json={
-            "identificador_da_carga": "carga-1",
-            "identificador_do_armazem_origem": "armazem-1",
-            "identificador_do_armazem_destino": "armazem-2",
-        })
-        motor = instancia_do_mundo.obter_motor()
-        motor.avancar_ciclo(1)
-        assert motor.armazens["armazem-1"].ocupacao == 0.0
-        assert motor.armazens["armazem-2"].ocupacao == 25.0
-
-
-def test_liberar_carga_reduz_a_ocupacao():
-    app = criar_app(com_loop_real_time=False)
-    with TestClient(app) as cliente:
-        cliente.post("/armazenagem/reservar-espaco", json={
-            "identificador_do_armazem": "armazem-1", "quantidade": 30.0,
-        })
-        cliente.post("/armazenagem/liberar-carga", json={
-            "identificador_do_armazem": "armazem-1", "quantidade": 10.0,
-        })
-        motor = instancia_do_mundo.obter_motor()
-        motor.avancar_ciclo(1)
-        assert motor.armazens["armazem-1"].ocupacao == 20.0
-
-
 def test_descartar_carga_remove_a_carga_e_libera_espaco():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         _receber_carga(cliente, quantidade=40.0)
-        cliente.post("/armazenagem/descartar-carga", json={
-            "identificador_da_carga": "carga-1", "identificador_do_armazem": "armazem-1",
-        })
         motor = instancia_do_mundo.obter_motor()
+        motor.avancar_ciclo(1)
+
+        cliente.post("/armazenagem/retirar-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificador_da_carga": "carga-1",
+            "id_autorizacao": _autorizar(cliente, "retirar_carga"),
+        })
+        motor.avancar_ciclo(1)
+
+        cliente.post("/armazenagem/descartar-carga", json={
+            "identificador_da_carga": "carga-1",
+        })
         motor.avancar_ciclo(1)
         assert "carga-1" not in motor.cargas
         assert motor.armazens["armazem-1"].ocupacao == 0.0
@@ -145,6 +125,9 @@ def test_descartar_carga_remove_a_carga_e_libera_espaco():
 def test_solicitar_transporte_exige_autorizacao_valida():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
+        instancia_do_mundo.obter_motor().cargas["carga-1"] = CargaMineral(
+            "carga-1", "hematita", 10.0, 100.0, local=LocalDaCarga.NA_MAO,
+        )
         resposta = cliente.post("/missao/autorizar-missao", json={
             "operacao": "solicitar_transporte", "central_solicitante": "armazenagem",
         })
@@ -161,6 +144,12 @@ def test_solicitar_transporte_exige_autorizacao_valida():
 def test_solicitar_transporte_rejeita_reuso_da_mesma_autorizacao():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
+        # As duas cargas existem para que o que se teste seja o reuso da
+        # autorização, e não a rota recusando um identificador inventado.
+        for nome in ("carga-1", "carga-2"):
+            instancia_do_mundo.obter_motor().cargas[nome] = CargaMineral(
+                nome, "hematita", 10.0, 100.0, local=LocalDaCarga.NA_MAO,
+            )
         resposta = cliente.post("/missao/autorizar-missao", json={
             "operacao": "solicitar_transporte", "central_solicitante": "armazenagem",
         })
@@ -185,6 +174,9 @@ def test_solicitar_transporte_rejeita_reuso_da_mesma_autorizacao():
 def test_solicitar_transporte_rejeita_autorizacao_inexistente():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
+        instancia_do_mundo.obter_motor().cargas["carga-1"] = CargaMineral(
+            "carga-1", "hematita", 10.0, 100.0, local=LocalDaCarga.NA_MAO,
+        )
         cliente.post("/armazenagem/solicitar-transporte", json={
             "identificador_da_carga": "carga-1", "id_autorizacao": "aut-inexistente",
         })
@@ -215,10 +207,12 @@ def test_receber_carga_normaliza_o_multiplicador_de_degradacao_do_local():
         motor.cargas["carga-1"] = CargaMineral(
             "carga-1", "hematita", 20.0, 90.0, mult_degradacao_local=0.5,
         )
+        motor.energia.alocar_energia("reserva_estrategica", "armazenagem", 200)
 
         cliente.post("/armazenagem/receber-carga", json={
             "identificador_do_armazem": "armazem-1",
-            "identificador_da_carga": "carga-1",
+            "identificadores_das_cargas": ["carga-1"],
+            "id_autorizacao": _autorizar(cliente),
         })
         motor.avancar_ciclo(1)
 

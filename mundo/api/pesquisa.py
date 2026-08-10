@@ -99,10 +99,14 @@ async def preparar_distribuicao(requisicao: RequisicaoDeDistribuicao) -> dict:
     def executar() -> None:
         motor.autorizacoes.consumir(requisicao.id_autorizacao, "preparar_distribuicao")
         carga = motor.cargas[requisicao.identificador_da_carga]
+        # Bloqueia o que está guardado ou viajando, não o que simplesmente
+        # nunca foi para um armazém: desenterrar é pedágio de quem guardou, não
+        # de quem produziu.
+        if carga.local in (LocalDaCarga.EM_ARMAZEM, LocalDaCarga.EM_TRANSITO):
+            raise ValueError("Só se distribui carga que não está guardada nem viajando")
         mineral = motor.catalogo_de_minerais.obter(carga.mineral)
         valor_entregue = carga.valor_efetivo(mineral.valor_por_unidade)
         motor.faturamento_total += valor_entregue
-        carga.mover_para(LocalDaCarga.ENTREGUE)
         motor.eventos.publicar("carga_entregue", motor.ciclo_atual, {
             "carga": carga.identificador, "valor_entregue": valor_entregue,
         })

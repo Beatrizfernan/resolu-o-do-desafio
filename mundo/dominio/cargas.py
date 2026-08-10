@@ -10,6 +10,7 @@ class LocalDaCarga(str, Enum):
     EM_JAZIDA = "em_jazida"
     EM_ARMAZEM = "em_armazem"
     EM_TRANSITO = "em_transito"
+    NA_MAO = "na_mao"
     ENTREGUE = "entregue"
 
 

@@ -1,0 +1,6 @@
+{
+  "custo_de_armazenagem_por_unidade": 0.05,
+  "custo_de_manutencao_por_unidade": 0.004,
+  "custo_por_movimento": 0.3,
+  "custo_por_desempilhamento": 0.8
+}

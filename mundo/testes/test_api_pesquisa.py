@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
-from mundo.dominio.cargas import CargaMineral
+from mundo.dominio.cargas import CargaMineral, LocalDaCarga
 
 
 def _tipos_de_eventos(motor) -> list[str]:
@@ -32,7 +32,7 @@ def test_consultar_fila_reflete_analises_iniciadas():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
 
         cliente.post("/pesquisa/iniciar-analise", json={"identificador_da_carga": "carga-1"})
         motor.avancar_ciclo(1)
@@ -44,7 +44,7 @@ def test_iniciar_analise_adiciona_carga_na_fila_e_debita_energia():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
         motor.energia.alocar_energia("reserva_estrategica", "pesquisa", 20)
         energia_antes = motor.energia.consultar_energia("pesquisa")
 
@@ -59,7 +59,7 @@ def test_iniciar_analise_sem_energia_gera_operacao_invalida():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
         motor.energia.revogar_energia("pesquisa", motor.energia.consultar_energia("pesquisa"))
 
         cliente.post("/pesquisa/iniciar-analise", json={"identificador_da_carga": "carga-1"})
@@ -80,7 +80,7 @@ def test_analise_conclui_apenas_apos_a_duracao_prevista():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
 
         cliente.post("/pesquisa/iniciar-analise", json={"identificador_da_carga": "carga-1"})
         motor.avancar_ciclo(3)
@@ -96,7 +96,7 @@ def test_classificar_carga_retorna_mineral_e_qualidade():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "jarosita", 10.0, 73.5)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "jarosita", 10.0, 73.5, local=LocalDaCarga.NA_MAO)
 
         resposta = cliente.post("/pesquisa/classificar-carga", json={"identificador_da_carga": "carga-1"})
 
@@ -114,7 +114,7 @@ def test_aprovar_carga_remove_da_fila_e_publica_carga_aprovada():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
         motor.fila_de_pesquisa.append("carga-1")
 
         cliente.post("/pesquisa/aprovar-carga", json={"identificador_da_carga": "carga-1"})
@@ -128,7 +128,7 @@ def test_aprovar_carga_fora_da_fila_publica_carga_aprovada_sem_erro():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
 
         cliente.post("/pesquisa/aprovar-carga", json={"identificador_da_carga": "carga-1"})
         motor.avancar_ciclo(1)
@@ -141,7 +141,7 @@ def test_aprovar_carga_no_limiar_de_qualidade_e_aprovada():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 40.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 40.0, local=LocalDaCarga.NA_MAO)
         motor.fila_de_pesquisa.append("carga-1")
 
         cliente.post("/pesquisa/aprovar-carga", json={"identificador_da_carga": "carga-1"})
@@ -155,7 +155,7 @@ def test_aprovar_carga_com_qualidade_baixa_gera_operacao_invalida():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 10.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 10.0, local=LocalDaCarga.NA_MAO)
         motor.fila_de_pesquisa.append("carga-1")
 
         cliente.post("/pesquisa/aprovar-carga", json={"identificador_da_carga": "carga-1"})
@@ -182,7 +182,7 @@ def test_rejeitar_carga_remove_da_fila_e_publica_carga_rejeitada():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 10.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 10.0, local=LocalDaCarga.NA_MAO)
         motor.fila_de_pesquisa.append("carga-1")
 
         cliente.post("/pesquisa/rejeitar-carga", json={"identificador_da_carga": "carga-1"})
@@ -209,7 +209,7 @@ def test_preparar_distribuicao_soma_faturamento():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0, local=LocalDaCarga.NA_MAO)
 
         _preparar_distribuicao(cliente, _autorizar(cliente))
         motor.avancar_ciclo(1)
@@ -221,7 +221,7 @@ def test_preparar_distribuicao_pondera_faturamento_pela_qualidade():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "cristal_marciano_raro", 2.0, 50.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "cristal_marciano_raro", 2.0, 50.0, local=LocalDaCarga.NA_MAO)
 
         _preparar_distribuicao(cliente, _autorizar(cliente))
         motor.avancar_ciclo(1)
@@ -238,7 +238,7 @@ def test_preparar_distribuicao_rejeita_reuso_da_mesma_autorizacao():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0, local=LocalDaCarga.NA_MAO)
         id_autorizacao = _autorizar(cliente)
 
         _preparar_distribuicao(cliente, id_autorizacao)
@@ -256,7 +256,7 @@ def test_preparar_distribuicao_consome_a_carga_impedindo_faturamento_duplicado()
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0, local=LocalDaCarga.NA_MAO)
 
         _preparar_distribuicao(cliente, _autorizar(cliente))
         motor.avancar_ciclo(1)
@@ -274,7 +274,7 @@ def test_preparar_distribuicao_sem_autorizacao_valida_gera_operacao_invalida():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0, local=LocalDaCarga.NA_MAO)
 
         _preparar_distribuicao(cliente, "aut-inexistente")
         motor.avancar_ciclo(1)
@@ -287,7 +287,7 @@ def test_preparar_distribuicao_rejeita_autorizacao_de_outra_operacao():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0, local=LocalDaCarga.NA_MAO)
 
         _preparar_distribuicao(cliente, _autorizar(cliente, operacao="iniciar_viagem"))
         motor.avancar_ciclo(1)
@@ -308,13 +308,18 @@ def test_preparar_distribuicao_de_carga_inexistente_nao_fatura():
         assert motor.faturamento_total == 0.0
 
 
-def test_preparar_distribuicao_marca_a_carga_como_entregue_antes_de_remove_la():
-    from mundo.dominio.cargas import LocalDaCarga
+def test_preparar_distribuicao_nao_marca_local_intermediario_antes_de_remover():
+    """A carga sai do mundo no mesmo passo em que é distribuída.
 
+    Antes, o local passava por `ENTREGUE` antes do `del`. Esse estado
+    intermediário nunca era observável fora do próprio comando, então deixou
+    de existir: a carga permanece com o local que tinha ao entrar no comando
+    (agora sempre `NA_MAO`, pré-condição de Task 7) até ser removida.
+    """
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0, local=LocalDaCarga.NA_MAO)
         locais_publicados = []
         motor.eventos.assinar(
             lambda evento: locais_publicados.append(motor.cargas["carga-1"].local)
@@ -325,5 +330,31 @@ def test_preparar_distribuicao_marca_a_carga_como_entregue_antes_de_remove_la():
         _preparar_distribuicao(cliente, id_autorizacao=_autorizar(cliente))
         motor.avancar_ciclo(1)
 
-        assert locais_publicados == [LocalDaCarga.ENTREGUE]
+        assert locais_publicados == [LocalDaCarga.NA_MAO]
         assert "carga-1" not in motor.cargas
+
+
+def test_nao_se_distribui_carga_que_ainda_esta_empilhada():
+    """Faturar exige ter a carga na mão.
+
+    Sem essa guarda, uma carga poderia ser faturada e removida do mundo
+    enquanto seu identificador continuasse na pilha do armazém: o armazém
+    apontaria para algo que não existe mais e a ocupação nunca seria
+    liberada. Desenterrar é o pedágio que a entrega tem que pagar.
+    """
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.cargas["carga-1"] = CargaMineral(
+            "carga-1", "hematita", 10.0, 100.0, local=LocalDaCarga.EM_ARMAZEM,
+        )
+        faturamento_antes = motor.faturamento_total
+
+        cliente.post("/pesquisa/preparar-distribuicao", json={
+            "identificador_da_carga": "carga-1",
+            "id_autorizacao": _autorizar(cliente),
+        })
+        motor.avancar_ciclo(1)
+
+        assert "carga-1" in motor.cargas, "a carga não pode sumir sem ser desenterrada"
+        assert motor.faturamento_total == faturamento_antes
