@@ -13,7 +13,7 @@ dependencies = [
 dev = ["pytest>=8.3", "pytest-asyncio>=0.24"]
 
 [tool.pytest.ini_options]
-testpaths = ["mundo/testes"]
+testpaths = ["mundo/testes", "avaliador/testes", "integridade/testes"]
 asyncio_mode = "auto"
 
 [build-system]
@@ -21,4 +21,4 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["mundo*"]
+include = ["mundo*", "avaliador*", "integridade*"]
