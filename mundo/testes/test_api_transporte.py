@@ -54,7 +54,7 @@ def test_consultar_cargas_disponiveis_lista_as_cargas_do_motor():
 
         resposta = cliente.get("/transporte/cargas-disponiveis")
         assert resposta.json() == [
-            {"identificador": "carga-1", "mineral": "hematita", "quantidade": 10.0, "qualidade": 90.0},
+            {"identificador": "carga-1", "mineral": "hematita", "quantidade": 10.0, "qualidade": None},
         ]
 
 

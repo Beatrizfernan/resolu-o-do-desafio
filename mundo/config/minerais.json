@@ -8,7 +8,8 @@
     "taxa_degradacao": 0.2,
     "sensibilidade_temperatura": 0.1,
     "sensibilidade_transporte": 0.1,
-    "sensibilidade_armazenagem": 0.1
+    "sensibilidade_armazenagem": 0.1,
+    "ciclos_de_analise": 2
   },
   {
     "nome": "silica_de_alta_pureza",
@@ -19,7 +20,8 @@
     "taxa_degradacao": 0.4,
     "sensibilidade_temperatura": 0.3,
     "sensibilidade_transporte": 0.3,
-    "sensibilidade_armazenagem": 0.3
+    "sensibilidade_armazenagem": 0.3,
+    "ciclos_de_analise": 4
   },
   {
     "nome": "jarosita",
@@ -30,7 +32,8 @@
     "taxa_degradacao": 0.7,
     "sensibilidade_temperatura": 0.6,
     "sensibilidade_transporte": 0.6,
-    "sensibilidade_armazenagem": 0.6
+    "sensibilidade_armazenagem": 0.6,
+    "ciclos_de_analise": 5
   },
   {
     "nome": "gelo_de_agua",
@@ -41,7 +44,8 @@
     "taxa_degradacao": 0.9,
     "sensibilidade_temperatura": 0.9,
     "sensibilidade_transporte": 0.5,
-    "sensibilidade_armazenagem": 0.7
+    "sensibilidade_armazenagem": 0.7,
+    "ciclos_de_analise": 3
   },
   {
     "nome": "cristal_marciano_raro",
@@ -52,6 +56,7 @@
     "taxa_degradacao": 0.3,
     "sensibilidade_temperatura": 0.4,
     "sensibilidade_transporte": 0.4,
-    "sensibilidade_armazenagem": 0.4
+    "sensibilidade_armazenagem": 0.4,
+    "ciclos_de_analise": 8
   }
 ]

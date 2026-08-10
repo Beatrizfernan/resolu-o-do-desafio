@@ -13,6 +13,7 @@ from mundo.dominio.jazidas import EstadoDaJazida, Jazida
 from mundo.dominio.minerais import CatalogoDeMinerais
 from mundo.dominio.operacao import CatalogoDeOperacao
 from mundo.dominio.modos import CatalogoDeModos
+from mundo.dominio.pesquisa import CatalogoDePesquisa
 from mundo.dominio.robos import EstadoDoRobo, Robo, UnidadeMineradora, UnidadeTransportadora
 from mundo.dominio.rotas import Rota
 from mundo.eventos.barramento import BarramentoDeEventos
@@ -39,6 +40,7 @@ class MotorDeSimulacao:
         catalogo_de_modos: CatalogoDeModos | None = None,
         catalogo_de_armazenagem: CatalogoDeArmazenagem | None = None,
         catalogo_de_operacao: CatalogoDeOperacao | None = None,
+        catalogo_de_pesquisa: CatalogoDePesquisa | None = None,
     ) -> None:
         self.configuracao = configuracao
         self.catalogo_de_minerais = catalogo_de_minerais
@@ -51,6 +53,9 @@ class MotorDeSimulacao:
         self.catalogo_de_operacao = catalogo_de_operacao or CatalogoDeOperacao.carregar_de_arquivo(
             Path(__file__).parent.parent / "config" / "operacao.json"
         )
+        self.catalogo_de_pesquisa = catalogo_de_pesquisa or CatalogoDePesquisa.carregar_de_arquivo(
+            Path(__file__).parent.parent / "config" / "pesquisa.json"
+        )
         self.ciclo_atual = 0
         self.encerrada: bool = False
         self.rng = random.Random(configuracao.semente)
@@ -62,7 +67,7 @@ class MotorDeSimulacao:
         self.armazens: dict[str, Armazem] = {}
         self.rotas: dict[str, Rota] = {}
         self.cargas: dict[str, CargaMineral] = {}
-        self.fila_de_pesquisa: list[str] = []
+        self.analises_em_andamento: list[str] = []
         self.faturamento_total: float = 0.0
         self.autorizacoes = RegistroDeAutorizacoes()
         self.eventos = BarramentoDeEventos()

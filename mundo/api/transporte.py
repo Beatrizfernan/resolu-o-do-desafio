@@ -53,7 +53,7 @@ async def consultar_cargas_disponiveis() -> list[dict]:
             "identificador": carga.identificador,
             "mineral": carga.mineral,
             "quantidade": carga.quantidade,
-            "qualidade": carga.qualidade,
+            "qualidade": carga.qualidade if carga.analisada else None,
         }
         for carga in motor.cargas.values()
     ]

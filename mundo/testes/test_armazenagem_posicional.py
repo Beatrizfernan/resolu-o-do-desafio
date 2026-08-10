@@ -74,7 +74,7 @@ def _preparar(cliente, quantidades: dict[str, float]):
     motor.energia.alocar_energia("reserva_estrategica", "armazenagem", 300)
     for nome, quantidade in quantidades.items():
         motor.cargas[nome] = CargaMineral(
-            nome, "hematita", quantidade, 100.0, local=LocalDaCarga.NA_MAO,
+            nome, "hematita", quantidade, 100.0, local=LocalDaCarga.NA_MAO, analisada=True
         )
     return motor
 
@@ -451,7 +451,7 @@ def test_falha_de_energia_ao_guardar_nao_deixa_a_carga_meio_dentro_do_armazem():
         # Saldo insuficiente para os 500 × 0.05 = 25.0 que guardar custaria.
         motor.energia.alocar_energia("reserva_estrategica", "armazenagem", 1)
         motor.cargas["c1"] = CargaMineral(
-            "c1", "hematita", 500.0, 100.0, local=LocalDaCarga.NA_MAO,
+            "c1", "hematita", 500.0, 100.0, local=LocalDaCarga.NA_MAO, analisada=True
         )
         invalidas = []
         motor.eventos.assinar(
@@ -518,6 +518,10 @@ def test_minerio_extraido_chega_ao_faturamento_sem_passar_pelo_armazem():
 
         for _ in range(12):
             motor.avancar_ciclo(1)
+            
+        cliente.post("/pesquisa/iniciar-analise", json={"identificador_da_carga": carga})
+        motor.avancar_ciclo(4) # Hematita leva 2, mas vou botar 4 pra sobrar
+
         faturamento_antes = motor.faturamento_total
 
         autorizacao = cliente.post("/missao/autorizar-missao", json={
@@ -555,7 +559,7 @@ def test_pedido_que_estoura_a_capacidade_nao_deixa_nada_no_armazem():
         metade_da_capacidade = armazem.capacidade * 0.6
         for nome in ("c1", "c2"):
             motor.cargas[nome] = CargaMineral(
-                nome, "hematita", metade_da_capacidade, 100.0, local=LocalDaCarga.NA_MAO,
+                nome, "hematita", metade_da_capacidade, 100.0, local=LocalDaCarga.NA_MAO, analisada=True
             )
         invalidas = []
         motor.eventos.assinar(

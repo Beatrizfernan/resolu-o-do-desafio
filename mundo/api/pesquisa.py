@@ -10,15 +10,19 @@ from .dependencias import obter_motor
 
 router = APIRouter(prefix="/pesquisa", tags=["pesquisa"])
 CENTRAL = "pesquisa"
-DURACAO_ANALISE_EM_CICLOS = 3
-CUSTO_ENERGETICO_ANALISE = 2
-LIMIAR_QUALIDADE_APROVACAO = 40.0
 
 
+@router.get("/em-andamento")
+async def consultar_em_andamento() -> list[str]:
+    motor = obter_motor()
+    return list(motor.analises_em_andamento)
+
+
+# Mantemos o endpoint /fila por retrocompatibilidade caso alguém o chame
 @router.get("/fila")
 async def consultar_fila() -> list[str]:
     motor = obter_motor()
-    return list(motor.fila_de_pesquisa)
+    return list(motor.analises_em_andamento)
 
 
 class RequisicaoDeAnalise(BaseModel):
@@ -28,19 +32,35 @@ class RequisicaoDeAnalise(BaseModel):
 @router.post("/iniciar-analise")
 async def iniciar_analise(requisicao: RequisicaoDeAnalise) -> dict:
     motor = obter_motor()
-    if requisicao.identificador_da_carga not in motor.cargas:
+    carga = motor.cargas.get(requisicao.identificador_da_carga)
+    if carga is None:
         raise HTTPException(status_code=404, detail="Carga não encontrada")
 
     def executar() -> None:
-        # Central dormente não opera. A verificação vem antes de tudo, como
-        # todas as outras: o que pode falhar tem que falhar antes de mutar.
         if not motor.energia.esta_operante(CENTRAL):
             raise ValueError(f"Central {CENTRAL} dormente")
-        motor.energia.debitar(CENTRAL, CUSTO_ENERGETICO_ANALISE)
-        motor.fila_de_pesquisa.append(requisicao.identificador_da_carga)
-        ciclo_conclusao = motor.ciclo_atual + DURACAO_ANALISE_EM_CICLOS
+            
+        catalogo = motor.catalogo_de_pesquisa
+        if len(motor.analises_em_andamento) >= catalogo.capacidade_paralela:
+            raise ValueError("Centro de pesquisa ocupado")
+            
+        mineral = motor.catalogo_de_minerais.obter(carga.mineral)
+        
+        custo = catalogo.custo_base_de_analise * mineral.custo_extracao
+        motor.energia.debitar(CENTRAL, custo)
+        
+        motor.analises_em_andamento.append(requisicao.identificador_da_carga)
+        
+        duracao = mineral.ciclos_de_analise
+        ciclo_conclusao = motor.ciclo_atual + duracao
 
         def concluir() -> None:
+            carga_em_analise = motor.cargas.get(requisicao.identificador_da_carga)
+            if carga_em_analise is not None:
+                carga_em_analise.analisada = True
+            if requisicao.identificador_da_carga in motor.analises_em_andamento:
+                motor.analises_em_andamento.remove(requisicao.identificador_da_carga)
+                
             motor.eventos.publicar("analise_concluida", motor.ciclo_atual, {
                 "carga": requisicao.identificador_da_carga,
             })
@@ -57,7 +77,9 @@ async def classificar_carga(requisicao: RequisicaoDeAnalise) -> dict:
     carga = motor.cargas.get(requisicao.identificador_da_carga)
     if carga is None:
         raise HTTPException(status_code=404, detail="Carga não encontrada")
-    return {"carga": carga.identificador, "mineral": carga.mineral, "qualidade": carga.qualidade}
+        
+    qualidade = carga.qualidade if carga.analisada else None
+    return {"carga": carga.identificador, "mineral": carga.mineral, "qualidade": qualidade}
 
 
 @router.post("/aprovar-carga")
@@ -65,11 +87,16 @@ async def aprovar_carga(requisicao: RequisicaoDeAnalise) -> dict:
     motor = obter_motor()
 
     def executar() -> None:
-        carga = motor.cargas[requisicao.identificador_da_carga]
-        if carga.qualidade < LIMIAR_QUALIDADE_APROVACAO:
+        carga = motor.cargas.get(requisicao.identificador_da_carga)
+        if carga is None:
+            raise ValueError("Carga não encontrada")
+        if not carga.analisada:
+            raise ValueError("Carga não analisada")
+            
+        limiar = motor.catalogo_de_pesquisa.limiar_qualidade_aprovacao
+        if carga.qualidade < limiar:
             raise ValueError("Qualidade insuficiente para aprovação")
-        if requisicao.identificador_da_carga in motor.fila_de_pesquisa:
-            motor.fila_de_pesquisa.remove(requisicao.identificador_da_carga)
+            
         motor.eventos.publicar("carga_aprovada", motor.ciclo_atual, {"carga": carga.identificador})
 
     motor.enfileirar_comando(Comando("aprovar_carga", CENTRAL, requisicao.model_dump(), executar))
@@ -81,8 +108,12 @@ async def rejeitar_carga(requisicao: RequisicaoDeAnalise) -> dict:
     motor = obter_motor()
 
     def executar() -> None:
-        if requisicao.identificador_da_carga in motor.fila_de_pesquisa:
-            motor.fila_de_pesquisa.remove(requisicao.identificador_da_carga)
+        carga = motor.cargas.get(requisicao.identificador_da_carga)
+        if carga is None:
+            raise ValueError("Carga não encontrada")
+        if not carga.analisada:
+            raise ValueError("Carga não analisada")
+            
         motor.eventos.publicar(
             "carga_rejeitada", motor.ciclo_atual, {"carga": requisicao.identificador_da_carga},
         )
@@ -102,12 +133,15 @@ async def preparar_distribuicao(requisicao: RequisicaoDeDistribuicao) -> dict:
 
     def executar() -> None:
         motor.autorizacoes.consumir(requisicao.id_autorizacao, "preparar_distribuicao")
-        carga = motor.cargas[requisicao.identificador_da_carga]
-        # Bloqueia o que está guardado ou viajando, não o que simplesmente
-        # nunca foi para um armazém: desenterrar é pedágio de quem guardou, não
-        # de quem produziu.
+        carga = motor.cargas.get(requisicao.identificador_da_carga)
+        if carga is None:
+            raise ValueError("Carga não encontrada")
+        if not carga.analisada:
+            raise ValueError("Carga não analisada")
+            
         if carga.local in (LocalDaCarga.EM_ARMAZEM, LocalDaCarga.EM_TRANSITO):
             raise ValueError("Só se distribui carga que não está guardada nem viajando")
+            
         mineral = motor.catalogo_de_minerais.obter(carga.mineral)
         valor_entregue = carga.valor_efetivo(mineral.valor_por_unidade)
         motor.faturamento_total += valor_entregue

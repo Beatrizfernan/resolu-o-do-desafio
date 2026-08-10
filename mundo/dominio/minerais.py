@@ -16,6 +16,7 @@ class Mineral:
     sensibilidade_temperatura: float
     sensibilidade_transporte: float
     sensibilidade_armazenagem: float
+    ciclos_de_analise: int
 
 
 class CatalogoDeMinerais:

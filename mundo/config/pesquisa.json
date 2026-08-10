@@ -1,0 +1,5 @@
+{
+  "capacidade_paralela": 1,
+  "custo_base_de_analise": 1.0,
+  "limiar_qualidade_aprovacao": 40.0
+}

@@ -65,7 +65,7 @@ def _operar(ordem_de_armazenagem: list[str], ordem_de_entrega: list[str]) -> flo
             motor.energia.alocar_energia("reserva_estrategica", central, 400)
         for nome in ordem_de_armazenagem:
             motor.cargas[nome] = CargaMineral(
-                nome, nome, QUANTIDADE, 100.0, local=LocalDaCarga.NA_MAO,
+                nome, nome, QUANTIDADE, 100.0, local=LocalDaCarga.NA_MAO, analisada=True
             )
 
         def energia_total() -> float:
