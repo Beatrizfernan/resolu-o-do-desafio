@@ -1,6 +1,6 @@
 # Revisão final — `armazenagem-posicional`
 
-14 commits, `8334e3c..2be8fee`. Suíte: 233 (baseline 199).
+16 commits, `8334e3c..300b711`. Suíte: 233 (baseline 199).
 
 **Quem revisou:** o controlador. O reviewer despachado não produziu saída em ~45 minutos, mesmo após dois pings — padrão que se repetiu ao longo desta sessão. Registro porque muda o peso desta revisão: ela é real, com mutação, mas não é um par de olhos independente.
 
@@ -31,7 +31,15 @@ Corrigido invertendo a ordem: validar, somar o custo, debitar, e só então empi
 
 ## Important
 
-Nenhum.
+### (corrigido, `300b711`) pedido com id repetido deixava rastro parcial
+
+A correção de `2be8fee` fechou uma porta para o mesmo defeito e deixou outra aberta. Um pedido repetindo um identificador — ou nomeando um já empilhado — só era pego por `Armazem.empilhar` na segunda ocorrência, quando a primeira já tinha entrado e o custo já fora cobrado pelas duas cópias.
+
+Com `['a','b','a']`: `operacao_invalida` publicado, as duas cargas empilhadas, ocupação 20.0, ambas ainda `NA_MAO`, e 1.58 de energia gasta por 30 unidades quando só existiam 20.
+
+O pedido passa a ser checado contra si mesmo antes de tudo. O teste que existia afirmava a mutação parcial como esperada — documentava o bug em vez de pegá-lo — e agora afirma o que deve valer.
+
+**Como escapou:** o implementer da Task 5 sinalizou exatamente este caminho no relatório dele, e eu corrigi só metade ao tratar o Critical do débito. Achado de peer que eu subestimei.
 
 ## Minor
 
