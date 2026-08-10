@@ -114,7 +114,7 @@ O pulmão da operação. Minérios "na mão" degradam muito rápido (pois estão
 
 ```mermaid
 graph TD
-    subgraph Armazém (Pilha LIFO)
+    subgraph Armazém
         Topo[1. Topo: Retirada de graça]
         Meio[2. Meio: Custo moderado de realocação]
         Fundo[3. Fundo: Custo massivo de desenterrar]
