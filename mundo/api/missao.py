@@ -8,12 +8,14 @@ from pydantic import BaseModel
 from mundo.dominio.energia import GerenciadorDeEnergia
 from mundo.dominio.minerais import CatalogoDeMinerais
 from mundo.eventos.webhooks import DispatcherDeWebhooks
+from mundo.motor.comandos import Comando
 from mundo.motor.motor_de_simulacao import ConfiguracaoDaSimulacao
 
 from .dependencias import instancia_do_mundo, obter_motor
 
 router = APIRouter(prefix="/missao", tags=["missao"])
 CAMINHO_CATALOGO = Path(__file__).parent.parent / "config" / "minerais.json"
+CENTRAL = "missao"
 
 
 class RequisicaoDeResetarMundo(BaseModel):
@@ -59,11 +61,16 @@ class RequisicaoDeAlocacao(BaseModel):
 @router.post("/alocar-energia")
 async def alocar_energia(requisicao: RequisicaoDeAlocacao) -> dict:
     motor = obter_motor()
-    try:
-        motor.energia.alocar_energia(GerenciadorDeEnergia.RESERVA, requisicao.destino, requisicao.quantidade)
-    except Exception as erro:
-        raise HTTPException(status_code=400, detail=str(erro)) from erro
-    return {"saldo": motor.energia.consultar_energia(requisicao.destino)}
+
+    def executar() -> None:
+        if not motor.energia.esta_operante(CENTRAL):
+            raise ValueError("Central de missão dormente: não há quem aloque")
+        motor.energia.alocar_energia(
+            GerenciadorDeEnergia.RESERVA, requisicao.destino, requisicao.quantidade,
+        )
+
+    motor.enfileirar_comando(Comando("alocar_energia", CENTRAL, requisicao.model_dump(), executar))
+    return {"aceito": True}
 
 
 class RequisicaoDeAutorizacao(BaseModel):
@@ -74,6 +81,15 @@ class RequisicaoDeAutorizacao(BaseModel):
 @router.post("/autorizar-missao")
 async def autorizar_missao(requisicao: RequisicaoDeAutorizacao) -> dict:
     motor = obter_motor()
+    # Esta rota permanece síncrona de propósito: ela devolve o identificador
+    # que o chamador usa na mesma requisição seguinte, então enfileirá-la
+    # quebraria todo o resto do projeto. É exceção conhecida, e única.
+    if not motor.energia.esta_operante(CENTRAL):
+        raise HTTPException(status_code=400, detail="Central de missão dormente")
+    try:
+        motor.energia.debitar(CENTRAL, motor.catalogo_de_operacao.custo_de_autorizacao)
+    except Exception as erro:
+        raise HTTPException(status_code=400, detail=str(erro)) from erro
     autorizacao = motor.autorizacoes.emitir(requisicao.operacao, requisicao.central_solicitante)
     return {"id_autorizacao": autorizacao.identificador}
 

@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
@@ -26,9 +27,14 @@ def test_alocar_energia_da_reserva_para_extracao():
         resposta = cliente.post("/missao/alocar-energia", json={"destino": "extracao", "quantidade": 20})
 
         assert resposta.status_code == 200
-        assert resposta.json()["saldo"] == 30
+        # A alocação passou a ser comando enfileirado, então a resposta só
+        # confirma o aceite: o saldo muda no tick, como toda outra mutação.
+        assert resposta.json() == {"aceito": True}
+        instancia_do_mundo.obter_motor().avancar_ciclo(1)
+
+        consumo = instancia_do_mundo.obter_motor().catalogo_de_operacao.consumo_por_ciclo_da_central
         energia = cliente.get("/missao/estado").json()["energia"]
-        assert energia["extracao"] == 30
+        assert energia["extracao"] == pytest.approx(30 - consumo)
         assert energia[GerenciadorDeEnergia.RESERVA] == reserva_inicial - 20
 
 
@@ -65,3 +71,63 @@ def test_consultar_eventos_retorna_lista_vazia_inicialmente():
     with TestClient(app) as cliente:
         resposta = cliente.get("/missao/eventos")
         assert resposta.json() == []
+
+
+def test_autorizar_debita_o_custo_da_missao():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        antes = motor.energia.consultar_energia("missao")
+
+        cliente.post("/missao/autorizar-missao", json={
+            "operacao": "receber_carga", "central_solicitante": "armazenagem",
+        })
+
+        gasto = antes - motor.energia.consultar_energia("missao")
+        assert gasto == pytest.approx(motor.catalogo_de_operacao.custo_de_autorizacao)
+
+
+def test_missao_dormente_nao_emite_autorizacao():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.debitar("missao", motor.energia.consultar_energia("missao"))
+
+        resposta = cliente.post("/missao/autorizar-missao", json={
+            "operacao": "receber_carga", "central_solicitante": "armazenagem",
+        })
+
+        assert resposta.status_code == 400
+
+
+def test_alocar_energia_so_muta_no_ciclo():
+    """Nenhuma rota muta estado de forma síncrona — nem esta.
+
+    Era a única exceção no projeto inteiro. Enfileirada como comando, a
+    alocação passa a valer no tick, como todo o resto.
+    """
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        antes = motor.energia.consultar_energia("extracao")
+
+        cliente.post("/missao/alocar-energia", json={"destino": "extracao", "quantidade": 50})
+        assert motor.energia.consultar_energia("extracao") == pytest.approx(antes)
+
+        motor.avancar_ciclo(1)
+        consumo = motor.catalogo_de_operacao.consumo_por_ciclo_da_central
+        assert motor.energia.consultar_energia("extracao") == pytest.approx(antes + 50 - consumo)
+
+
+def test_missao_dormente_nao_aloca():
+    """Esta linha é o mecanismo inteiro do deadlock."""
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.debitar("missao", motor.energia.consultar_energia("missao"))
+        antes = motor.energia.consultar_energia("extracao")
+
+        cliente.post("/missao/alocar-energia", json={"destino": "extracao", "quantidade": 50})
+        motor.avancar_ciclo(1)
+
+        assert motor.energia.consultar_energia("extracao") < antes + 50
