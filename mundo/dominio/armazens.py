@@ -61,6 +61,9 @@ class Armazem:
             raise CargaNaoEstaNoArmazemError(identificador)
         indice = self.pilha.index(identificador)
         removidos = self.pilha[indice:]
+        faltando = [nome for nome in removidos if nome not in quantidades]
+        if faltando:
+            raise KeyError(f"Quantidade ausente para: {faltando}")
         self.pilha = self.pilha[:indice]
         for nome in removidos:
             self.liberar_espaco(quantidades[nome])

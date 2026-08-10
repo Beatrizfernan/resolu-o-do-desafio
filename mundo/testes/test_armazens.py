@@ -136,3 +136,23 @@ def test_ocupacao_nunca_diverge_da_pilha():
 
     assert armazem.pilha == ["c1"]
     assert armazem.ocupacao == 7.0
+
+
+def test_desempilhar_com_mapa_incompleto_nao_altera_pilha_nem_ocupacao():
+    """Validar antes de mutar: um mapa incompleto não pode deixar a pilha e a
+    ocupação divergentes a meio caminho.
+
+    Se a validação viesse depois de truncar `pilha`, um `quantidades` faltando
+    uma chave interromperia a operação com a pilha já cortada e a ocupação só
+    parcialmente decrementada — a mesma divergência entre conteúdo e contador
+    que este sub-projeto existe para eliminar.
+    """
+    armazem = Armazem("a1", capacidade=100.0, localizacao="setor-1", condicoes="normal")
+    for nome in ("c1", "c2", "c3"):
+        armazem.empilhar(nome, 20.0)
+
+    with pytest.raises(KeyError):
+        armazem.desempilhar_ate("c1", {"c1": 20.0, "c3": 20.0})  # falta c2
+
+    assert armazem.pilha == ["c1", "c2", "c3"]
+    assert armazem.ocupacao == 60.0
