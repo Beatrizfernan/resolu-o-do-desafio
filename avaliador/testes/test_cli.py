@@ -60,3 +60,34 @@ def test_cli_retorna_zero_quando_integridade_aprova(monkeypatch, tmp_path: Path)
 
     assert codigo == 0
     assert saida.exists()
+
+
+def test_cli_pode_exibir_relatorio_no_stdout(monkeypatch, tmp_path: Path, capsys):
+    raiz_do_projeto = Path.cwd()
+    manifesto = tmp_path / "manifesto.sha256.json"
+    gerar_manifesto(raiz_do_projeto, manifesto)
+    saida = tmp_path / "saida.md"
+
+    monkeypatch.chdir(raiz_do_projeto)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "avaliador.cli",
+            "--seeds",
+            "1",
+            "--limite-de-ciclos",
+            "1",
+            "--manifesto",
+            str(manifesto),
+            "--saida",
+            str(saida),
+            "--mostrar-relatorio",
+        ],
+    )
+
+    codigo = main()
+
+    capturado = capsys.readouterr()
+    assert codigo == 0
+    assert "# Relatorio de Avaliacao" in capturado.out
+    assert "## Resultado agregado" in capturado.out

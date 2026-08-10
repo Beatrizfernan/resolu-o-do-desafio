@@ -43,3 +43,14 @@ def test_cliente_controla_o_mundo_e_expoe_rotas_existentes():
     assert isinstance(jazidas, list)
     assert cliente.consultar_estado()["ciclo_atual"] == 2
     assert isinstance(eventos, list)
+
+
+def test_runner_padrao_avanca_ate_o_limite_quando_nao_encerra():
+    from centrais.avaliacao import executar_avaliacao
+
+    cliente = ClienteDeAvaliacao()
+    cliente.resetar(semente=7)
+
+    executar_avaliacao(cliente, 3)
+
+    assert cliente.consultar_estado()["ciclo_atual"] == 3
