@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
@@ -52,7 +53,11 @@ def test_iniciar_analise_adiciona_carga_na_fila_e_debita_energia():
         motor.avancar_ciclo(1)
 
         assert "carga-1" in motor.fila_de_pesquisa
-        assert motor.energia.consultar_energia("pesquisa") == energia_antes - 2
+        # A central paga aluguel por ciclo além do custo da operação.
+        consumo = motor.catalogo_de_operacao.consumo_por_ciclo_da_central
+        assert motor.energia.consultar_energia("pesquisa") == pytest.approx(
+            energia_antes - 2 - consumo
+        )
 
 
 def test_iniciar_analise_sem_energia_gera_operacao_invalida():

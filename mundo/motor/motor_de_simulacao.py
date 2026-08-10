@@ -11,6 +11,7 @@ from mundo.dominio.cargas import CargaMineral, LocalDaCarga
 from mundo.dominio.energia import GerenciadorDeEnergia
 from mundo.dominio.jazidas import EstadoDaJazida, Jazida
 from mundo.dominio.minerais import CatalogoDeMinerais
+from mundo.dominio.operacao import CatalogoDeOperacao
 from mundo.dominio.modos import CatalogoDeModos
 from mundo.dominio.robos import EstadoDoRobo, Robo, UnidadeMineradora, UnidadeTransportadora
 from mundo.dominio.rotas import Rota
@@ -38,6 +39,7 @@ class MotorDeSimulacao:
         catalogo_de_minerais: CatalogoDeMinerais,
         catalogo_de_modos: CatalogoDeModos | None = None,
         catalogo_de_armazenagem: CatalogoDeArmazenagem | None = None,
+        catalogo_de_operacao: CatalogoDeOperacao | None = None,
     ) -> None:
         self.configuracao = configuracao
         self.catalogo_de_minerais = catalogo_de_minerais
@@ -46,6 +48,9 @@ class MotorDeSimulacao:
         )
         self.catalogo_de_armazenagem = catalogo_de_armazenagem or CatalogoDeArmazenagem.carregar_de_arquivo(
             Path(__file__).parent.parent / "config" / "armazenagem.json"
+        )
+        self.catalogo_de_operacao = catalogo_de_operacao or CatalogoDeOperacao.carregar_de_arquivo(
+            Path(__file__).parent.parent / "config" / "operacao.json"
         )
         self.ciclo_atual = 0
         self.rng = random.Random(configuracao.semente)
@@ -103,6 +108,7 @@ class MotorDeSimulacao:
         self._degradar_cargas()
         self._recuperar_desgaste()
         self._cobrar_manutencao_dos_armazens()
+        self._cobrar_consumo_das_centrais()
 
     def _degradar_cargas(self) -> None:
         for carga in self.cargas.values():
@@ -126,6 +132,22 @@ class MotorDeSimulacao:
         for robo in self.robos.values():
             if robo.estado == EstadoDoRobo.DISPONIVEL:
                 robo.desgaste = max(0.0, robo.desgaste - recuperacao)
+
+    def _cobrar_consumo_das_centrais(self) -> None:
+        """Existir custa: cada central paga do próprio saldo, todo ciclo.
+
+        É o que impede a indecisão de ser gratuita — um robô parado ainda
+        consome, então adiar a alocação tem preço sem precisar de nenhuma
+        regra que proíba adiar.
+
+        Cobra com `debitar_ate_o_saldo` porque o consumo é involuntário: a
+        central não escolheu existir naquele ciclo, então não pode ser
+        rejeitada por não poder pagar. Quem não cobre entrega o que resta e
+        fica dormente, sem acumular dívida.
+        """
+        consumo = self.catalogo_de_operacao.consumo_por_ciclo_da_central
+        for central in CENTRAIS:
+            self.energia.debitar_ate_o_saldo(central, consumo)
 
     def _cobrar_manutencao_dos_armazens(self) -> None:
         """Guardar minério custa energia a cada ciclo, proporcional ao volume.

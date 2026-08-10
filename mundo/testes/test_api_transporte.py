@@ -142,7 +142,11 @@ def test_iniciar_viagem_exige_autorizacao_e_debita_viagem_disponivel():
 
         assert motor.robos["transportadora-1"].viagens_disponiveis == 9
         assert motor.robos["transportadora-1"].estado.value == "executando"
-        assert motor.energia.consultar_energia("transporte") == energia_antes - 3
+        # A central paga aluguel por ciclo além do custo da operação.
+        consumo = motor.catalogo_de_operacao.consumo_por_ciclo_da_central
+        assert motor.energia.consultar_energia("transporte") == pytest.approx(
+            energia_antes - 3 - consumo
+        )
 
 
 def test_iniciar_viagem_sem_autorizacao_valida_gera_operacao_invalida():
@@ -219,7 +223,11 @@ def test_iniciar_viagem_sem_viagens_disponiveis_gera_operacao_invalida():
 
         assert "operacao_invalida" in _tipos_de_eventos(motor)
         assert motor.robos["transportadora-1"].viagens_disponiveis == 0
-        assert motor.energia.consultar_energia("transporte") == energia_antes
+        # "sem consumir nada" é sobre a operação: existir custa de qualquer forma.
+        consumo = motor.catalogo_de_operacao.consumo_por_ciclo_da_central
+        assert motor.energia.consultar_energia("transporte") == pytest.approx(
+            energia_antes - consumo
+        )
 
 
 def test_iniciar_viagem_com_rota_inexistente_retorna_404():
@@ -250,7 +258,11 @@ def test_iniciar_viagem_com_carga_inexistente_retorna_404_sem_consumir_nada():
         assert resposta.status_code == 404
         assert motor.robos["transportadora-1"].estado.value == "disponivel"
         assert motor.robos["transportadora-1"].viagens_disponiveis == 10
-        assert motor.energia.consultar_energia("transporte") == energia_antes
+        # "sem consumir nada" é sobre a operação: existir custa de qualquer forma.
+        consumo = motor.catalogo_de_operacao.consumo_por_ciclo_da_central
+        assert motor.energia.consultar_energia("transporte") == pytest.approx(
+            energia_antes - consumo
+        )
 
 
 def test_viagem_conclui_apos_o_tempo_base_degradando_a_carga():
