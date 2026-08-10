@@ -60,26 +60,35 @@ async def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
                 raise ValueError("Mineral incompatível com o armazém")
             total += carga.quantidade * custos.custo_de_armazenagem_por_unidade
 
-        # A ordem é validada ANTES de empilhar. `executar()` roda dentro do
-        # try do motor, então levantar aqui vira `operacao_invalida` — mas se
-        # as cargas já tivessem sido empilhadas, a pilha ficaria alterada por
-        # uma operação que o mundo registrou como inválida.
+        # Tudo que pode falhar acontece antes de qualquer mutação: validar a
+        # ordem, somar o custo inteiro e debitar. `executar()` roda dentro do
+        # try do motor, então levantar aqui vira `operacao_invalida` e o tick
+        # sobrevive — mas o que já tiver sido mutado **continua mutado**. Uma
+        # falha depois de empilhar deixaria a carga na pilha, ocupando espaço,
+        # e ainda marcada como estando na mão: dentro e fora do armazém ao
+        # mesmo tempo, por uma operação que o mundo registrou como inválida.
+        pilha_resultante = armazem.pilha + list(requisicao.identificadores_das_cargas)
+        movimentos = 0
         if requisicao.nova_ordem is not None:
-            pilha_resultante = armazem.pilha + list(requisicao.identificadores_das_cargas)
             if sorted(requisicao.nova_ordem) != sorted(pilha_resultante):
                 raise ValueError(
                     "A nova ordem precisa ser uma permutação exata da pilha resultante"
                 )
-
-        for identificador in requisicao.identificadores_das_cargas:
-            armazem.empilhar(identificador, motor.cargas[identificador].quantidade)
-
-        movimentos = 0
-        if requisicao.nova_ordem is not None:
-            movimentos = armazem.reordenar(requisicao.nova_ordem)
+            # O deslocamento é aritmética pura sobre a pilha que ainda não
+            # existe, justamente para o preço ser conhecido antes de mexer nela.
+            posicao_futura = {nome: i for i, nome in enumerate(pilha_resultante)}
+            movimentos = sum(
+                abs(i - posicao_futura[nome])
+                for i, nome in enumerate(requisicao.nova_ordem)
+            )
             total += movimentos * custos.custo_por_movimento
 
         motor.energia.debitar(CENTRAL, total)
+
+        for identificador in requisicao.identificadores_das_cargas:
+            armazem.empilhar(identificador, motor.cargas[identificador].quantidade)
+        if requisicao.nova_ordem is not None:
+            armazem.reordenar(requisicao.nova_ordem)
         for identificador in requisicao.identificadores_das_cargas:
             motor.cargas[identificador].mover_para(LocalDaCarga.EM_ARMAZEM)
 

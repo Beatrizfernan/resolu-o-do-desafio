@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
 from mundo.dominio.armazenagem import CatalogoDeArmazenagem
+from mundo.dominio.cargas import CargaMineral, LocalDaCarga
 
 CAMINHO_ARMAZENAGEM = Path(__file__).parent.parent / "config" / "armazenagem.json"
 CUSTOS = CatalogoDeArmazenagem.carregar_de_arquivo(CAMINHO_ARMAZENAGEM)
@@ -411,4 +412,41 @@ def test_viagem_termina_com_a_carga_na_mao():
             motor.avancar_ciclo(1)
 
         from mundo.dominio.cargas import LocalDaCarga
+        assert motor.cargas["c1"].local == LocalDaCarga.NA_MAO
+
+
+def test_falha_de_energia_ao_guardar_nao_deixa_a_carga_meio_dentro_do_armazem():
+    """Operação inválida não pode deixar rastro na pilha.
+
+    `executar()` roda dentro do try do motor, então uma falha vira
+    `operacao_invalida` e o tick sobrevive — mas o que já foi mutado continua
+    mutado. Se o débito de energia acontecesse depois de empilhar, uma central
+    sem saldo deixaria a carga na pilha, ocupando espaço, e ainda marcada como
+    estando na mão: dentro e fora do armazém ao mesmo tempo, com a ocupação
+    apontando para algo que o mundo diz não ter guardado.
+    """
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        # Saldo insuficiente para os 500 × 0.05 = 25.0 que guardar custaria.
+        motor.energia.alocar_energia("reserva_estrategica", "armazenagem", 1)
+        motor.cargas["c1"] = CargaMineral(
+            "c1", "hematita", 500.0, 100.0, local=LocalDaCarga.NA_MAO,
+        )
+        invalidas = []
+        motor.eventos.assinar(
+            lambda e: invalidas.append(e) if e.tipo == "operacao_invalida" else None
+        )
+
+        cliente.post("/armazenagem/receber-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificadores_das_cargas": ["c1"],
+            "id_autorizacao": _autorizar(cliente),
+        })
+        motor.avancar_ciclo(1)
+
+        armazem = motor.armazens["armazem-1"]
+        assert invalidas, "faltar energia deveria publicar operacao_invalida"
+        assert armazem.pilha == [], "a carga não pode ficar na pilha"
+        assert armazem.ocupacao == 0.0, "a ocupação não pode contar o que não entrou"
         assert motor.cargas["c1"].local == LocalDaCarga.NA_MAO
