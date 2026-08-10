@@ -198,7 +198,10 @@ def _custo_de_uma_extracao(modo):
         _extrair(cliente, modo=modo)
         motor.avancar_ciclo(1)
 
-        return mineral.custo_extracao, antes - motor.energia.consultar_energia("extracao")
+        # Descontado o consumo do ciclo: o que interessa aqui é o preço da
+        # extração, não o aluguel que a central paga só por existir.
+        gasto = antes - motor.energia.consultar_energia("extracao")
+        return mineral.custo_extracao, gasto - motor.catalogo_de_operacao.consumo_por_ciclo_da_central
 
 
 def test_custo_energetico_deriva_do_mineral_e_do_modo():
@@ -240,7 +243,10 @@ def _custo_com_jazida_em(fracao_restante):
         _extrair(cliente, modo="normal")
         motor.avancar_ciclo(1)
 
-        return antes - motor.energia.consultar_energia("extracao")
+        # Descontado o consumo do ciclo, pelo mesmo motivo do helper acima: a
+        # razão de 16x é entre custos de extração, e o aluguel é aditivo.
+        gasto = antes - motor.energia.consultar_energia("extracao")
+        return gasto - motor.catalogo_de_operacao.consumo_por_ciclo_da_central
 
 
 def test_extrair_de_jazida_esvaziada_custa_mais_que_de_jazida_intacta():
@@ -316,7 +322,12 @@ def test_extracao_que_excede_a_jazida_com_desperdicio_e_rejeitada_sem_gastar_nad
 
         # A validação acontece antes do débito e da transição de estado: nada é
         # gasto e a unidade continua livre para receber outro comando.
-        assert motor.energia.consultar_energia("extracao") == energia_antes
+        # "sem gastar nada" é sobre a operação: o consumo por ciclo da central
+        # acontece de qualquer forma, porque existir não é opcional.
+        consumo = motor.catalogo_de_operacao.consumo_por_ciclo_da_central
+        assert motor.energia.consultar_energia("extracao") == pytest.approx(
+            energia_antes - consumo
+        )
         assert motor.robos["mineradora-1"].estado == EstadoDoRobo.DISPONIVEL
         assert motor.robos["mineradora-1"].desgaste == 0.0
         assert motor.jazidas["jazida-1"].quantidade_disponivel == 11.0

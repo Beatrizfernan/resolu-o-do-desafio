@@ -168,6 +168,8 @@ Guardar vinte unidades custa 1.0 — exatamente a taxa fixa que a versão anteri
 
 Consequência aceita: com guardar e manter cobrando por unidade, dividir o mesmo minério em muitas cargas pequenas é estritamente pior, então o tamanho do lote deixou de ser decisão estratégica. Extrair no maior lote possível domina.
 
+Isso foi parcialmente revertido depois: como autorizar custa energia e `receber-carga` aceita uma lista, agrupar cargas numa chamada passou a valer a pena. Ver **Custo de Autorização**.
+
 ## Ordem de Armazenagem
 
 A decisão que o sub-projeto existe para criar. Como o topo é o fim da lista, guardar na ordem certa significa empilhar do último ao primeiro a sair — quem faz isso paga profundidade zero em toda retirada.
@@ -183,3 +185,42 @@ A cadeia completa é **perda de valor > preço > empilhar sem pensar**, e os deg
 Guardar é escolha, não pedágio: minério extraído pode ser despachado e entregue sem nunca passar por um armazém. O que bloqueia transporte e entrega é a carga estar **guardada ou viajando**, não estar fora da mão — se toda produção fosse obrigada a passar pela pilha, o custo incidiria igual sobre qualquer estratégia e deixaria de distinguir uma da outra.
 
 Fixado por `mundo/testes/test_dominancia_de_armazenagem.py`.
+
+
+## Consumo por Ciclo
+
+Cada uma das cinco centrais paga `consumo_por_ciclo_da_central` (0.05) do próprio saldo, todo ciclo. A reserva não paga — ela só guarda.
+
+Existir custa, e é isso que impede a indecisão de ser gratuita: um robô parado ainda consome, então adiar uma alocação tem preço sem que nenhuma regra proíba adiar. É a mesma pressão que a manutenção de armazém exerce sobre o volume guardado, um nível acima.
+
+Cobrado com `debitar_ate_o_saldo`, não com `debitar`, porque o consumo é involuntário: a central não escolheu existir naquele ciclo, então não pode ser recusada por não poder pagar. Quem não cobre entrega o que resta e fica dormente, sem acumular dívida.
+
+## Central Dormente
+
+Central sem saldo não executa operação nem paga consumo. Dormente, não morta: alocar energia para ela a traz de volta.
+
+Toda rota que debita energia verifica isso como primeira linha do comando, antes de qualquer mutação.
+
+## Armadilha da Missão
+
+A missão pode ressuscitar as outras quatro centrais, mas não a si mesma — sem saldo ela não aloca, e sem alocação ninguém recebe energia. A reserva congela e o resto seca.
+
+É deliberadamente **uma** armadilha, não cinco. Se qualquer central seca fosse definitiva, um erro de alocação em extração encerraria a mineração para sempre e o mundo ficaria punitivo em cinco frentes. Concentrando a irreversibilidade na missão, existe exatamente um erro fatal, ele é barato de evitar, e é o erro que corresponde a ignorar a única decisão global do jogo.
+
+Os 10 iniciais duram 200 ciclos sem nenhuma alocação. Quarenta de energia sustentam a missão além de 1000. E ela é detectável antes de disparar: `/missao/estado` mostra o saldo desde o ciclo 1 — a informação está lá, a questão é se o participante olhou.
+
+## Encerramento
+
+A simulação acaba quando todas as centrais estão dormentes, e publica `simulacao_encerrada` com o ciclo, o faturamento e a energia encalhada.
+
+O fim é consequência, não constante: `duracao_maxima` foi removida por ser campo que existia na configuração e nunca era lido. A terminação é garantida porque a energia total só diminui.
+
+Quem ignora a missão morre no ciclo 200 com 950 encalhados — o piso do desafio. Quem distribui os 950 entre as cinco centrais opera por milhares de ciclos.
+
+## Custo de Autorização
+
+Emitir autorização debita `custo_de_autorizacao` (0.2) da missão, o equivalente a quatro ciclos de existência. Missão dormente não emite.
+
+Como `receber-carga` aceita uma **lista** de cargas, guardar cinco numa chamada custa uma autorização e em cinco chamadas custa cinco. É isso que devolve relevância ao tamanho do lote, que a armazenagem posicional tinha registrado como decisão morta.
+
+`autorizar-missao` é a única rota do projeto que muta de forma síncrona, e é exceção deliberada: ela devolve o identificador que o chamador usa na requisição seguinte, então enfileirá-la quebraria todas as outras. Não estender a mais nada.

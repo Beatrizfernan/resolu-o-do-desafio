@@ -51,6 +51,10 @@ def _valor_por_energia(modo: str, mineral: str, rota: str) -> float:
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
         motor.energia.alocar_energia("reserva_estrategica", "transporte", 800)
+        # A missão paga por cada autorização, e este cenário pede centenas.
+        # Sem isso ela seca no meio e o que se mede vira o orçamento dela, não
+        # a diferença entre os modos.
+        motor.energia.alocar_energia("reserva_estrategica", "missao", 100)
         unidade = motor.robos["transportadora-1"]
         # O teto de viagens existe para a missão, não para esta medição: aqui o
         # que se compara é o regime sustentado, não quantas viagens cabem.

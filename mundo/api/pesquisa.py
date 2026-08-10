@@ -32,6 +32,10 @@ async def iniciar_analise(requisicao: RequisicaoDeAnalise) -> dict:
         raise HTTPException(status_code=404, detail="Carga não encontrada")
 
     def executar() -> None:
+        # Central dormente não opera. A verificação vem antes de tudo, como
+        # todas as outras: o que pode falhar tem que falhar antes de mutar.
+        if not motor.energia.esta_operante(CENTRAL):
+            raise ValueError(f"Central {CENTRAL} dormente")
         motor.energia.debitar(CENTRAL, CUSTO_ENERGETICO_ANALISE)
         motor.fila_de_pesquisa.append(requisicao.identificador_da_carga)
         ciclo_conclusao = motor.ciclo_atual + DURACAO_ANALISE_EM_CICLOS

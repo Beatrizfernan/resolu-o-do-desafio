@@ -26,6 +26,31 @@ class GerenciadorDeEnergia:
         self._validar_central(central)
         return self._saldos[central]
 
+    def esta_operante(self, central: str) -> bool:
+        """Uma central sem saldo fica dormente: não executa nem consome.
+
+        Dormente, não morta — alocar energia para ela a traz de volta. A única
+        exceção é a missão, e não por regra especial daqui: é que sem ela não
+        existe quem aloque.
+        """
+        self._validar_central(central)
+        return self._saldos[central] > 0.0
+
+    def debitar_ate_o_saldo(self, central: str, quantidade: float) -> float:
+        """Debita no máximo o que houver, e devolve quanto foi debitado.
+
+        O consumo por ciclo é involuntário: a central não escolheu existir
+        naquele ciclo, então não pode ser rejeitada por não poder pagar. Ela
+        entrega o que resta e fica dormente. `debitar` continua levantando,
+        porque uma operação que não cabe no saldo tem mesmo que ser recusada.
+        """
+        self._validar_central(central)
+        if quantidade < 0.0:
+            raise ValueError(f"Consumo não pode ser negativo: {quantidade}")
+        debitado = min(quantidade, self._saldos[central])
+        self._saldos[central] -= debitado
+        return debitado
+
     def alocar_energia(self, origem: str, destino: str, quantidade: float) -> None:
         self._validar_quantidade(quantidade)
         if origem != self.RESERVA:

@@ -6,10 +6,15 @@ from fastapi.testclient import TestClient
 from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
 from mundo.dominio.armazenagem import CatalogoDeArmazenagem
+from mundo.dominio.operacao import CatalogoDeOperacao
 from mundo.dominio.cargas import CargaMineral, LocalDaCarga
 
 CAMINHO_ARMAZENAGEM = Path(__file__).parent.parent / "config" / "armazenagem.json"
 CUSTOS = CatalogoDeArmazenagem.carregar_de_arquivo(CAMINHO_ARMAZENAGEM)
+CAMINHO_OPERACAO = Path(__file__).parent.parent / "config" / "operacao.json"
+# Toda central paga aluguel por ciclo. Onde um teste mede o preço de uma
+# operação, este valor entra como parcela aditiva do que foi debitado.
+CONSUMO = CatalogoDeOperacao.carregar_de_arquivo(CAMINHO_OPERACAO).consumo_por_ciclo_da_central
 
 
 def test_manutencao_cobra_por_unidade_armazenada_a_cada_ciclo():
@@ -22,7 +27,7 @@ def test_manutencao_cobra_por_unidade_armazenada_a_cada_ciclo():
 
         motor.avancar_ciclo(1)
 
-        esperado = 25.0 * CUSTOS.custo_de_manutencao_por_unidade
+        esperado = 25.0 * CUSTOS.custo_de_manutencao_por_unidade + CONSUMO
         assert antes - motor.energia.consultar_energia("armazenagem") == pytest.approx(esperado)
 
 
@@ -35,7 +40,10 @@ def test_armazem_vazio_nao_custa_manutencao():
 
         motor.avancar_ciclo(3)
 
-        assert motor.energia.consultar_energia("armazenagem") == antes
+        # Armazém vazio não paga manutenção, mas a central paga aluguel.
+        assert motor.energia.consultar_energia("armazenagem") == pytest.approx(
+            antes - 3 * CONSUMO
+        )
 
 
 def test_manutencao_sem_saldo_nao_derruba_o_ciclo():
@@ -88,7 +96,7 @@ def test_receber_empilha_na_ordem_dada_e_cobra_por_unidade():
         assert armazem.pilha == ["c1", "c2"]
         gasto = antes - motor.energia.consultar_energia("armazenagem")
         manutencao = armazem.ocupacao * CUSTOS.custo_de_manutencao_por_unidade
-        esperado = 30.0 * CUSTOS.custo_de_armazenagem_por_unidade + manutencao
+        esperado = 30.0 * CUSTOS.custo_de_armazenagem_por_unidade + manutencao + CONSUMO
         assert gasto == pytest.approx(esperado)
 
 
@@ -122,6 +130,7 @@ def test_nova_ordem_reordena_a_pilha_e_cobra_por_movimento():
             1.0 * CUSTOS.custo_de_armazenagem_por_unidade
             + 4 * CUSTOS.custo_por_movimento
             + manutencao
+            + CONSUMO
         )
         assert gasto == pytest.approx(esperado)
 
@@ -148,7 +157,7 @@ def test_sem_nova_ordem_nada_se_move_e_nao_ha_custo_de_movimento():
         armazem = motor.armazens["armazem-1"]
         manutencao = armazem.ocupacao * CUSTOS.custo_de_manutencao_por_unidade
         gasto = antes - motor.energia.consultar_energia("armazenagem")
-        esperado = 1.0 * CUSTOS.custo_de_armazenagem_por_unidade + manutencao
+        esperado = 1.0 * CUSTOS.custo_de_armazenagem_por_unidade + manutencao + CONSUMO
         assert gasto == pytest.approx(esperado)
 
 
@@ -267,7 +276,7 @@ def test_retirar_cobra_por_profundidade():
         motor.avancar_ciclo(1)
 
         gasto = antes - motor.energia.consultar_energia("armazenagem")
-        assert gasto == pytest.approx(2 * CUSTOS.custo_por_desempilhamento)
+        assert gasto == pytest.approx(2 * CUSTOS.custo_por_desempilhamento + CONSUMO)
 
 
 def test_retirar_do_topo_nao_custa_desempilhamento():
@@ -293,6 +302,7 @@ def test_retirar_do_topo_nao_custa_desempilhamento():
             antes
             - motor.energia.consultar_energia("armazenagem")
             - motor.armazens["armazem-1"].ocupacao * CUSTOS.custo_de_manutencao_por_unidade
+            - CONSUMO
         )
         assert gasto_sem_manutencao == pytest.approx(0.0)
 

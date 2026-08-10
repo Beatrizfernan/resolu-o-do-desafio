@@ -16,7 +16,7 @@ CAMINHO_CATALOGO = Path(__file__).parent.parent / "config" / "minerais.json"
 
 def _criar_motor(semente: int = 1) -> MotorDeSimulacao:
     catalogo = CatalogoDeMinerais.carregar_de_arquivo(CAMINHO_CATALOGO)
-    return MotorDeSimulacao(ConfiguracaoDaSimulacao(semente=semente, duracao_maxima=50), catalogo)
+    return MotorDeSimulacao(ConfiguracaoDaSimulacao(semente=semente), catalogo)
 
 
 def test_robo_disponivel_recupera_desgaste_a_cada_ciclo():
