@@ -50,10 +50,10 @@ def test_manutencao_sem_saldo_nao_derruba_o_ciclo():
         assert motor.ciclo_atual == ciclo_antes + 1
 
 
-def _autorizar(cliente) -> str:
+def _autorizar(cliente, operacao: str = "receber_carga") -> str:
     resposta = cliente.post(
         "/missao/autorizar-missao",
-        json={"operacao": "receber_carga", "central_solicitante": "armazenagem"},
+        json={"operacao": operacao, "central_solicitante": "armazenagem"},
     )
     return resposta.json()["id_autorizacao"]
 
@@ -216,3 +216,119 @@ def test_receber_carga_com_identificador_repetido_nao_deixa_pilha_inconsistente(
         armazem = motor.armazens["armazem-1"]
         assert armazem.pilha == ["c1"]
         assert armazem.ocupacao == 10.0
+
+
+def test_retirar_devolve_o_alvo_e_tudo_acima_para_a_mao():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = _preparar(cliente, {"c1": 1.0, "c2": 1.0, "c3": 1.0})
+        cliente.post("/armazenagem/receber-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificadores_das_cargas": ["c1", "c2", "c3"],
+            "id_autorizacao": _autorizar(cliente),
+        })
+        motor.avancar_ciclo(1)
+
+        cliente.post("/armazenagem/retirar-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificador_da_carga": "c1",
+            "id_autorizacao": _autorizar(cliente, "retirar_carga"),
+        })
+        motor.avancar_ciclo(1)
+
+        from mundo.dominio.cargas import LocalDaCarga
+        assert motor.armazens["armazem-1"].pilha == []
+        for nome in ("c1", "c2", "c3"):
+            assert motor.cargas[nome].local == LocalDaCarga.NA_MAO
+
+
+def test_retirar_cobra_por_profundidade():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = _preparar(cliente, {"c1": 1.0, "c2": 1.0, "c3": 1.0})
+        cliente.post("/armazenagem/receber-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificadores_das_cargas": ["c1", "c2", "c3"],
+            "id_autorizacao": _autorizar(cliente),
+        })
+        motor.avancar_ciclo(1)
+        antes = motor.energia.consultar_energia("armazenagem")
+
+        # c1 está no fundo de uma pilha de três: profundidade 2.
+        cliente.post("/armazenagem/retirar-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificador_da_carga": "c1",
+            "id_autorizacao": _autorizar(cliente, "retirar_carga"),
+        })
+        motor.avancar_ciclo(1)
+
+        gasto = antes - motor.energia.consultar_energia("armazenagem")
+        assert gasto == pytest.approx(2 * CUSTOS.custo_por_desempilhamento)
+
+
+def test_retirar_do_topo_nao_custa_desempilhamento():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = _preparar(cliente, {"c1": 1.0, "c2": 1.0})
+        cliente.post("/armazenagem/receber-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificadores_das_cargas": ["c1", "c2"],
+            "id_autorizacao": _autorizar(cliente),
+        })
+        motor.avancar_ciclo(1)
+        antes = motor.energia.consultar_energia("armazenagem")
+
+        cliente.post("/armazenagem/retirar-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificador_da_carga": "c2",
+            "id_autorizacao": _autorizar(cliente, "retirar_carga"),
+        })
+        motor.avancar_ciclo(1)
+
+        gasto_sem_manutencao = (
+            antes
+            - motor.energia.consultar_energia("armazenagem")
+            - motor.armazens["armazem-1"].ocupacao * CUSTOS.custo_de_manutencao_por_unidade
+        )
+        assert gasto_sem_manutencao == pytest.approx(0.0)
+
+
+def test_ocupacao_volta_a_zero_depois_de_retirar_tudo():
+    """Regressão do vazamento que travava o mundo.
+
+    Antes, entregar uma carga removia-a do mundo sem liberar espaço: a
+    ocupação só subia. Com 1000 de capacidade contra 1484 de minério, quem
+    processasse minério demais entupia os dois armazéns sem volta.
+    """
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = _preparar(cliente, {f"c{i}": 20.0 for i in range(5)})
+        cliente.post("/armazenagem/receber-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificadores_das_cargas": [f"c{i}" for i in range(5)],
+            "id_autorizacao": _autorizar(cliente),
+        })
+        motor.avancar_ciclo(1)
+        assert motor.armazens["armazem-1"].ocupacao == 100.0
+
+        cliente.post("/armazenagem/retirar-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificador_da_carga": "c0",
+            "id_autorizacao": _autorizar(cliente, "retirar_carga"),
+        })
+        motor.avancar_ciclo(1)
+
+        assert motor.armazens["armazem-1"].ocupacao == 0.0
+        assert motor.armazens["armazem-1"].pilha == []
+
+
+def test_endpoints_incoerentes_com_a_pilha_sumiram():
+    """Os três escreviam ocupação sem referência a carga alguma.
+
+    Era o que permitia zerar um armazém cheio com um número inventado.
+    """
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        for rota in ("liberar-carga", "realocar-carga", "reservar-espaco"):
+            resposta = cliente.post(f"/armazenagem/{rota}", json={})
+            assert resposta.status_code == 404, f"{rota} ainda existe"

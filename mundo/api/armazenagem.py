@@ -10,7 +10,6 @@ from .dependencias import obter_motor
 
 router = APIRouter(prefix="/armazenagem", tags=["armazenagem"])
 CENTRAL = "armazenagem"
-CUSTO_ENERGETICO_OPERACAO = 1
 LIMIAR_PROXIMO_DA_CAPACIDADE = 0.9
 
 
@@ -27,26 +26,6 @@ async def consultar_armazens() -> list[dict]:
         }
         for armazem in motor.armazens.values()
     ]
-
-
-class RequisicaoDeReserva(BaseModel):
-    identificador_do_armazem: str
-    quantidade: float
-
-
-@router.post("/reservar-espaco")
-async def reservar_espaco(requisicao: RequisicaoDeReserva) -> dict:
-    motor = obter_motor()
-    armazem = motor.armazens.get(requisicao.identificador_do_armazem)
-    if armazem is None:
-        raise HTTPException(status_code=404, detail="Armazém não encontrado")
-
-    def executar() -> None:
-        motor.energia.debitar(CENTRAL, CUSTO_ENERGETICO_OPERACAO)
-        armazem.reservar_espaco(requisicao.quantidade)
-
-    motor.enfileirar_comando(Comando("reservar_espaco", CENTRAL, requisicao.model_dump(), executar))
-    return {"aceito": True}
 
 
 class RequisicaoDeRecebimento(BaseModel):
@@ -129,46 +108,55 @@ async def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
     return {"aceito": True}
 
 
-class RequisicaoDeRealocacao(BaseModel):
-    identificador_da_carga: str
-    identificador_do_armazem_origem: str
-    identificador_do_armazem_destino: str
-
-
-@router.post("/realocar-carga")
-async def realocar_carga(requisicao: RequisicaoDeRealocacao) -> dict:
-    motor = obter_motor()
-
-    def executar() -> None:
-        origem = motor.armazens[requisicao.identificador_do_armazem_origem]
-        destino = motor.armazens[requisicao.identificador_do_armazem_destino]
-        carga = motor.cargas[requisicao.identificador_da_carga]
-        destino.reservar_espaco(carga.quantidade)
-        origem.liberar_espaco(carga.quantidade)
-
-    motor.enfileirar_comando(Comando("realocar_carga", CENTRAL, requisicao.model_dump(), executar))
-    return {"aceito": True}
-
-
-class RequisicaoDeLiberacao(BaseModel):
+class RequisicaoDeRetirada(BaseModel):
     identificador_do_armazem: str
-    quantidade: float
+    identificador_da_carga: str
+    id_autorizacao: str
 
 
-@router.post("/liberar-carga")
-async def liberar_carga(requisicao: RequisicaoDeLiberacao) -> dict:
+@router.post("/retirar-carga")
+async def retirar_carga(requisicao: RequisicaoDeRetirada) -> dict:
     motor = obter_motor()
+    armazem = motor.armazens.get(requisicao.identificador_do_armazem)
+    if armazem is None:
+        raise HTTPException(status_code=404, detail="Armazém não encontrado")
 
     def executar() -> None:
-        motor.armazens[requisicao.identificador_do_armazem].liberar_espaco(requisicao.quantidade)
+        motor.autorizacoes.consumir(requisicao.id_autorizacao, "retirar_carga")
+        # A profundidade é medida antes de mexer na pilha: é ela que define o
+        # preço, e depois de desempilhar não há mais o que medir.
+        profundidade = armazem.profundidade(requisicao.identificador_da_carga)
+        custo = profundidade * motor.catalogo_de_armazenagem.custo_por_desempilhamento
+        # Retirar do topo é de graça, e `debitar` rejeita valor não-positivo:
+        # cobrar zero derrubaria a operação inteira. É o caso comum de quem
+        # guardou na ordem certa, e ele precisa ser o mais barato, não o único
+        # que falha.
+        if custo > 0.0:
+            motor.energia.debitar(CENTRAL, custo)
 
-    motor.enfileirar_comando(Comando("liberar_carga", CENTRAL, requisicao.model_dump(), executar))
+        quantidades = {nome: motor.cargas[nome].quantidade for nome in armazem.pilha}
+        removidos = armazem.desempilhar_ate(requisicao.identificador_da_carga, quantidades)
+        for nome in removidos:
+            motor.cargas[nome].mover_para(LocalDaCarga.NA_MAO)
+
+        motor.eventos.publicar(
+            "cargas_desempilhadas",
+            motor.ciclo_atual,
+            {
+                "armazem": armazem.identificador,
+                "alvo": requisicao.identificador_da_carga,
+                "cargas": removidos,
+                "profundidade": profundidade,
+                "custo": custo,
+            },
+        )
+
+    motor.enfileirar_comando(Comando("retirar_carga", CENTRAL, requisicao.model_dump(), executar))
     return {"aceito": True}
 
 
 class RequisicaoDeDescarte(BaseModel):
     identificador_da_carga: str
-    identificador_do_armazem: str
 
 
 @router.post("/descartar-carga")
@@ -176,8 +164,10 @@ async def descartar_carga(requisicao: RequisicaoDeDescarte) -> dict:
     motor = obter_motor()
 
     def executar() -> None:
-        carga = motor.cargas.pop(requisicao.identificador_da_carga)
-        motor.armazens[requisicao.identificador_do_armazem].liberar_espaco(carga.quantidade)
+        carga = motor.cargas[requisicao.identificador_da_carga]
+        if carga.local != LocalDaCarga.NA_MAO:
+            raise ValueError("Só se descarta carga que está na mão")
+        del motor.cargas[requisicao.identificador_da_carga]
         motor.eventos.publicar("carga_descartada", motor.ciclo_atual, {"carga": carga.identificador})
 
     motor.enfileirar_comando(Comando("descartar_carga", CENTRAL, requisicao.model_dump(), executar))

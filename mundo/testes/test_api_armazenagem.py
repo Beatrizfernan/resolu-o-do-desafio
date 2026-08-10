@@ -5,10 +5,10 @@ from mundo.api.dependencias import instancia_do_mundo
 from mundo.dominio.cargas import CargaMineral
 
 
-def _autorizar(cliente) -> str:
+def _autorizar(cliente, operacao: str = "receber_carga") -> str:
     resposta = cliente.post(
         "/missao/autorizar-missao",
-        json={"operacao": "receber_carga", "central_solicitante": "armazenagem"},
+        json={"operacao": operacao, "central_solicitante": "armazenagem"},
     )
     return resposta.json()["id_autorizacao"]
 
@@ -99,54 +99,23 @@ def test_receber_carga_publica_armazem_lotado():
         assert "armazem_lotado" in _tipos_de_eventos(motor)
 
 
-def test_reservar_espaco_aumenta_a_ocupacao():
-    app = criar_app(com_loop_real_time=False)
-    with TestClient(app) as cliente:
-        cliente.post("/armazenagem/reservar-espaco", json={
-            "identificador_do_armazem": "armazem-1", "quantidade": 30.0,
-        })
-        motor = instancia_do_mundo.obter_motor()
-        motor.avancar_ciclo(1)
-        assert motor.armazens["armazem-1"].ocupacao == 30.0
-
-
-def test_realocar_carga_transfere_ocupacao_entre_armazens():
-    app = criar_app(com_loop_real_time=False)
-    with TestClient(app) as cliente:
-        _receber_carga(cliente, quantidade=25.0)
-        cliente.post("/armazenagem/realocar-carga", json={
-            "identificador_da_carga": "carga-1",
-            "identificador_do_armazem_origem": "armazem-1",
-            "identificador_do_armazem_destino": "armazem-2",
-        })
-        motor = instancia_do_mundo.obter_motor()
-        motor.avancar_ciclo(1)
-        assert motor.armazens["armazem-1"].ocupacao == 0.0
-        assert motor.armazens["armazem-2"].ocupacao == 25.0
-
-
-def test_liberar_carga_reduz_a_ocupacao():
-    app = criar_app(com_loop_real_time=False)
-    with TestClient(app) as cliente:
-        cliente.post("/armazenagem/reservar-espaco", json={
-            "identificador_do_armazem": "armazem-1", "quantidade": 30.0,
-        })
-        cliente.post("/armazenagem/liberar-carga", json={
-            "identificador_do_armazem": "armazem-1", "quantidade": 10.0,
-        })
-        motor = instancia_do_mundo.obter_motor()
-        motor.avancar_ciclo(1)
-        assert motor.armazens["armazem-1"].ocupacao == 20.0
-
-
 def test_descartar_carga_remove_a_carga_e_libera_espaco():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         _receber_carga(cliente, quantidade=40.0)
-        cliente.post("/armazenagem/descartar-carga", json={
-            "identificador_da_carga": "carga-1", "identificador_do_armazem": "armazem-1",
-        })
         motor = instancia_do_mundo.obter_motor()
+        motor.avancar_ciclo(1)
+
+        cliente.post("/armazenagem/retirar-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificador_da_carga": "carga-1",
+            "id_autorizacao": _autorizar(cliente, "retirar_carga"),
+        })
+        motor.avancar_ciclo(1)
+
+        cliente.post("/armazenagem/descartar-carga", json={
+            "identificador_da_carga": "carga-1",
+        })
         motor.avancar_ciclo(1)
         assert "carga-1" not in motor.cargas
         assert motor.armazens["armazem-1"].ocupacao == 0.0
