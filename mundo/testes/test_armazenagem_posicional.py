@@ -393,7 +393,14 @@ def test_nao_se_transporta_carga_que_esta_enterrada():
         })
         motor.avancar_ciclo(1)
 
+        # Afirmar só que houve alguma invalidação deixaria o teste passar por
+        # qualquer falha — autorização errada, energia faltando, o que for. O
+        # motivo é o que distingue "recusou pela razão certa" de "quebrou".
         assert invalidas, "transportar carga empilhada deveria ser inválido"
+        motivos = [evento.dados["motivo"] for evento in invalidas]
+        assert any("guardada" in motivo for motivo in motivos), (
+            f"recusa deveria citar a carga estar guardada, mas veio: {motivos}"
+        )
 
 
 def test_viagem_termina_com_a_carga_na_mao():
@@ -557,3 +564,31 @@ def test_pedido_que_estoura_a_capacidade_nao_deixa_nada_no_armazem():
         assert armazem.ocupacao == 0.0
         for nome in ("c1", "c2"):
             assert motor.cargas[nome].local == LocalDaCarga.NA_MAO
+
+
+def test_consultar_armazens_expoe_a_ordem_da_pilha():
+    """A variável de decisão precisa ser observável.
+
+    A ordem da pilha é o que este sub-projeto inteiro existe para transformar
+    em decisão. Se ela não vier no estado do mundo, o participante só a
+    reconstrói acumulando eventos e refazendo a aritmética da reordenação por
+    conta própria — o que troca uma decisão estratégica por um exercício de
+    escrituração.
+    """
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = _preparar(cliente, {"c1": 5.0, "c2": 5.0, "c3": 5.0})
+        cliente.post("/armazenagem/receber-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificadores_das_cargas": ["c1", "c2", "c3"],
+            "nova_ordem": ["c3", "c1", "c2"],
+            "id_autorizacao": _autorizar(cliente),
+        })
+        motor.avancar_ciclo(1)
+
+        armazens = cliente.get("/armazenagem/armazens").json()
+        armazem = next(a for a in armazens if a["identificador"] == "armazem-1")
+
+        assert armazem["pilha"] == ["c3", "c1", "c2"], (
+            "o GET precisa devolver a ordem real da pilha, do fundo para o topo"
+        )

@@ -24,6 +24,12 @@ async def consultar_armazens() -> list[dict]:
             "ocupacao": armazem.ocupacao,
             "localizacao": armazem.localizacao,
             "condicoes": armazem.condicoes,
+            # A pilha é a variável de decisão do sub-projeto inteiro, então
+            # precisa ser legível. Sem isto o participante só a reconstruiria
+            # acumulando eventos e refazendo a aritmética da reordenação por
+            # conta própria — o que transformaria a decisão num exercício de
+            # bookkeeping em vez de estratégia. Do fundo para o topo.
+            "pilha": list(armazem.pilha),
         }
         for armazem in motor.armazens.values()
     ]
