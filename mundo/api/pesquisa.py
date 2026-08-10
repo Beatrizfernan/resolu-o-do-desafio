@@ -29,6 +29,10 @@ class RequisicaoDeAnalise(BaseModel):
     identificador_da_carga: str
 
 
+class RequisicaoDeSondagem(BaseModel):
+    identificador_da_jazida: str
+
+
 @router.post("/iniciar-analise")
 async def iniciar_analise(requisicao: RequisicaoDeAnalise) -> dict:
     motor = obter_motor()
@@ -69,6 +73,61 @@ async def iniciar_analise(requisicao: RequisicaoDeAnalise) -> dict:
 
     motor.enfileirar_comando(Comando("iniciar_analise", CENTRAL, requisicao.model_dump(), executar))
     return {"aceito": True}
+
+
+@router.post("/sondar-jazida")
+async def sondar_jazida(requisicao: RequisicaoDeSondagem) -> dict:
+    motor = obter_motor()
+    jazida = motor.jazidas.get(requisicao.identificador_da_jazida)
+    if jazida is None:
+        raise HTTPException(status_code=404, detail="Jazida não encontrada")
+
+    def executar() -> None:
+        if not motor.energia.esta_operante(CENTRAL):
+            raise ValueError(f"Central {CENTRAL} dormente")
+
+        catalogo = motor.catalogo_de_pesquisa
+        if len(motor.analises_em_andamento) >= catalogo.capacidade_paralela:
+            raise ValueError("Centro de pesquisa ocupado")
+        if jazida.composicao_estimada is not None:
+            raise ValueError("Jazida já sondada")
+
+        motor.energia.debitar(CENTRAL, catalogo.custo_base_de_analise)
+
+        identificador_da_sondagem = f"jazida:{jazida.identificador}"
+        motor.analises_em_andamento.append(identificador_da_sondagem)
+        ciclo_conclusao = motor.ciclo_atual + 2
+
+        def concluir() -> None:
+            jazida.composicao_estimada = jazida.estimar_composicao()
+            if identificador_da_sondagem in motor.analises_em_andamento:
+                motor.analises_em_andamento.remove(identificador_da_sondagem)
+
+            motor.eventos.publicar("sondagem_de_jazida_concluida", motor.ciclo_atual, {
+                "jazida": jazida.identificador,
+                "estimativa_de_composicao": jazida.composicao_estimada,
+            })
+
+        motor.agendar_efeito(ciclo_conclusao, concluir)
+
+    motor.enfileirar_comando(Comando("sondar_jazida", CENTRAL, requisicao.model_dump(), executar))
+    return {"aceito": True}
+
+
+@router.get("/jazidas/{identificador}/estimativa")
+async def consultar_estimativa_da_jazida(identificador: str) -> dict:
+    motor = obter_motor()
+    jazida = motor.jazidas.get(identificador)
+    if jazida is None:
+        raise HTTPException(status_code=404, detail="Jazida não encontrada")
+    if jazida.composicao_estimada is None:
+        raise HTTPException(status_code=404, detail="Jazida ainda não sondada")
+
+    return {
+        "jazida": jazida.identificador,
+        "mineral_predominante": jazida.mineral,
+        "estimativa_de_composicao": jazida.composicao_estimada,
+    }
 
 
 @router.post("/classificar-carga")

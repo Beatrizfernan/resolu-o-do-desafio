@@ -50,6 +50,32 @@ def test_jazida_nunca_regenera():
     assert jazida.quantidade_inicial == 100.0
 
 
+def test_estimar_composicao_converte_fracoes_em_faixas():
+    jazida = Jazida(
+        identificador="j1",
+        localizacao="setor-1",
+        mineral="hematita",
+        quantidade_disponivel=100.0,
+        dificuldade_extracao=1.0,
+        risco=0.1,
+        estado=EstadoDaJazida.DISPONIVEL,
+        composicao_real={"hematita": 0.72, "jarosita": 0.18, "cristal_raro": 0.03},
+    )
+
+    assert jazida.estimar_composicao() == {
+        "hematita": "alta",
+        "jarosita": "baixa",
+        "cristal_raro": "tracos",
+    }
+
+
+def test_jazida_pode_guardar_estimativa_persistida():
+    jazida = _criar_jazida()
+    jazida.composicao_estimada = {"hematita": "alta"}
+
+    assert jazida.composicao_estimada == {"hematita": "alta"}
+
+
 def test_transicao_invalida_lanca_erro():
     jazida = _criar_jazida(estado=EstadoDaJazida.ESGOTADA)
     with pytest.raises(TransicaoDeEstadoInvalidaError):

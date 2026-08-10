@@ -105,6 +105,66 @@ def test_classificar_carga_mostra_qualidade_se_analisada():
         assert resposta.json()["qualidade"] == 90.0
 
 
+def test_sondar_jazida_conclui_e_persiste_estimativa():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "pesquisa", 20)
+
+        resposta = cliente.post("/pesquisa/sondar-jazida", json={"identificador_da_jazida": "jazida-1"})
+        assert resposta.status_code == 200
+
+        motor.avancar_ciclo(1)
+        motor.avancar_ciclo(2)
+
+        consulta = cliente.get("/pesquisa/jazidas/jazida-1/estimativa")
+        assert consulta.status_code == 200
+        assert consulta.json()["jazida"] == "jazida-1"
+        assert consulta.json()["estimativa_de_composicao"]
+        assert any(e.tipo == "sondagem_de_jazida_concluida" for e in motor.eventos.consultar_eventos())
+
+
+def test_sondar_jazida_compete_com_analise_de_carga():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
+        motor.energia.alocar_energia("reserva_estrategica", "pesquisa", 20)
+
+        cliente.post("/pesquisa/iniciar-analise", json={"identificador_da_carga": "carga-1"})
+        motor.avancar_ciclo(1)
+
+        cliente.post("/pesquisa/sondar-jazida", json={"identificador_da_jazida": "jazida-1"})
+        motor.avancar_ciclo(1)
+
+        eventos = motor.eventos.consultar_eventos()
+        assert any(e.tipo == "operacao_invalida" and "ocupado" in e.dados["motivo"] for e in eventos)
+
+
+def test_consultar_estimativa_de_jazida_nao_sondada_retorna_404():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        resposta = cliente.get("/pesquisa/jazidas/jazida-1/estimativa")
+
+        assert resposta.status_code == 404
+
+
+def test_sondar_jazida_ja_sondada_gera_operacao_invalida():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "pesquisa", 30)
+
+        cliente.post("/pesquisa/sondar-jazida", json={"identificador_da_jazida": "jazida-1"})
+        motor.avancar_ciclo(3)
+
+        cliente.post("/pesquisa/sondar-jazida", json={"identificador_da_jazida": "jazida-1"})
+        motor.avancar_ciclo(1)
+
+        eventos = motor.eventos.consultar_eventos()
+        assert any(e.tipo == "operacao_invalida" and "sondada" in e.dados["motivo"] for e in eventos)
+
+
 def test_aprovar_carga_nao_analisada_gera_erro():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
@@ -167,4 +227,3 @@ def test_preparar_distribuicao_analisada_soma_faturamento():
         motor.avancar_ciclo(1)
 
         assert motor.faturamento_total == 50.0
-

@@ -35,10 +35,14 @@ class Jazida:
     risco: float
     estado: EstadoDaJazida = EstadoDaJazida.DESCONHECIDA
     quantidade_inicial: float | None = None
+    composicao_real: dict[str, float] | None = None
+    composicao_estimada: dict[str, str] | None = None
 
     def __post_init__(self) -> None:
         if self.quantidade_inicial is None:
             self.quantidade_inicial = self.quantidade_disponivel
+        if self.composicao_real is None:
+            self.composicao_real = {self.mineral: 1.0}
 
     @property
     def fracao_restante(self) -> float:
@@ -51,6 +55,21 @@ class Jazida:
         if novo_estado not in _TRANSICOES_VALIDAS[self.estado]:
             raise TransicaoDeEstadoInvalidaError(f"{self.estado} -> {novo_estado}")
         self.estado = novo_estado
+
+    def estimar_composicao(self) -> dict[str, str]:
+        estimativa: dict[str, str] = {}
+        for mineral, fracao in self.composicao_real.items():
+            if fracao <= 0.0:
+                continue
+            if fracao <= 0.05:
+                estimativa[mineral] = "tracos"
+            elif fracao <= 0.20:
+                estimativa[mineral] = "baixa"
+            elif fracao <= 0.50:
+                estimativa[mineral] = "media"
+            else:
+                estimativa[mineral] = "alta"
+        return estimativa
 
     def extrair(self, quantidade: float) -> None:
         if self.estado != EstadoDaJazida.DISPONIVEL:

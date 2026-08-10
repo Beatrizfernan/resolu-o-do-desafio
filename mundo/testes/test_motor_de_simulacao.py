@@ -21,6 +21,15 @@ def test_motor_gera_mundo_inicial_com_entidades():
     assert len(motor.rotas) == 2
 
 
+def test_motor_gera_jazidas_com_composicao_real_nao_trivial():
+    motor = _criar_motor(semente=7)
+
+    composicoes = [jazida.composicao_real for jazida in motor.jazidas.values()]
+
+    assert all(composicao is not None for composicao in composicoes)
+    assert any(len(composicao) > 1 for composicao in composicoes)
+
+
 def test_avancar_ciclo_incrementa_contador():
     motor = _criar_motor()
     motor.avancar_ciclo(3)

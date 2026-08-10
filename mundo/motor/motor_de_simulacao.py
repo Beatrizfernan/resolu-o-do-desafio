@@ -213,11 +213,13 @@ class MotorDeSimulacao:
             )
 
     def _gerar_mundo_inicial(self) -> None:
+        nomes_dos_minerais = [mineral.nome for mineral in self.catalogo_de_minerais.todos()]
         contador_jazidas = 1
         for mineral in self.catalogo_de_minerais.todos():
             for _ in range(2):
                 identificador = f"jazida-{contador_jazidas}"
                 quantidade = self.rng.uniform(50, 200)
+                composicao = self._gerar_composicao_da_jazida(mineral.nome, nomes_dos_minerais)
                 self.jazidas[identificador] = Jazida(
                     identificador=identificador,
                     localizacao=f"setor-{contador_jazidas}",
@@ -227,6 +229,7 @@ class MotorDeSimulacao:
                     risco=self.rng.uniform(0.0, 0.3),
                     estado=EstadoDaJazida.DISPONIVEL,
                     quantidade_inicial=quantidade,
+                    composicao_real=composicao,
                 )
                 contador_jazidas += 1
 
@@ -274,3 +277,25 @@ class MotorDeSimulacao:
             tempo_base=7,
             risco=0.08,
         )
+
+    def _gerar_composicao_da_jazida(
+        self,
+        mineral_predominante: str,
+        nomes_dos_minerais: list[str],
+    ) -> dict[str, float]:
+        outros_minerais = [nome for nome in nomes_dos_minerais if nome != mineral_predominante]
+        composicao = {mineral_predominante: 0.7}
+        if not outros_minerais:
+            return composicao
+
+        secundario = self.rng.choice(outros_minerais)
+        composicao[secundario] = 0.2
+
+        terciarios = [nome for nome in outros_minerais if nome != secundario]
+        if not terciarios:
+            return composicao
+
+        fracao_restante = 0.1 / len(terciarios)
+        for nome in terciarios:
+            composicao[nome] = round(fracao_restante, 4)
+        return composicao

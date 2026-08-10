@@ -98,7 +98,8 @@ Move o mineral da jazida para a base onde ficam o Armazém e a Pesquisa.
   * Transportadoras só possuem um número X de "viagens" antes de sofrerem manutenção. 
   * Cargas valiosas ou raras sofrem muito mais degradação por ciclo fora de áreas seguras.
   * O modo de condução Econômico salva energia e robôs, mas o tempo extra corrói o valor do minério raro.
-* **Mecânica a contornar:** Não há transporte genérico. O desenvolvedor precisa implementar um algoritmo de roteamento que saiba ler a carga que está aguardando (mesmo sem ainda saber sua qualidade) e decidir: **"Esse minério compensa o custo extremo do transporte expresso?"**
+  * A qualidade exata da carga continua oculta antes da análise, então a decisão de transporte ainda é feita sob incerteza.
+* **Mecânica a contornar:** Não há transporte genérico. O desenvolvedor precisa implementar um algoritmo de roteamento que saiba ler a carga que está aguardando e combinar isso com a **estimativa de composição da jazida de origem** para decidir: **"Esse minério compensa o custo extremo do transporte expresso?"**
 
 ---
 
@@ -131,13 +132,15 @@ graph TD
 ### 🔬 Central de Pesquisa
 O funil e gargalo estratégico da operação. É o único local com equipamento capaz de aferir a real pureza do mineral e autorizar sua venda.
 
-* **O que permite:** Iniciar análises, classificar a qualidade de cargas já analisadas, e distribuí-las para transformar o ativo em faturamento no sistema.
+* **O que permite:** Iniciar análises, classificar a qualidade de cargas já analisadas, sondar jazidas para revelar uma **estimativa de composição em faixas**, e distribuir cargas aprovadas para transformar o ativo em faturamento no sistema.
 * **Vantagem:** Sem ela, a operação inteira trabalha "às cegas". Uma carga não analisada não informa qualidade em nenhuma outra central e não pode ser vendida.
 * **Desvantagens/Cuidados:**
   * Só consegue processar **UM pedido por vez**. Ocupar a máquina rejeitará novas chamadas.
   * O tempo de análise varia por mineral. Analisar um Cristal Raro leva vários ciclos a mais do que investigar Areia.
-* **Mecânica a contornar:** Assimetria de Informação e Sistemas de Fila. Uma vez que o laboratório processa apenas um volume por vez e cada um leva um tempo diferente, novas cargas de transporte vão chegar o tempo inteiro. Na "mão", elas apodrecem. 
-  Seu sistema precisará **implementar e gerenciar sua própria fila de prioridade inteligente**, ponderando se vale a pena sacrificar 8 ciclos processando a rocha de altíssimo valor (deixando o resto apodrecendo na chuva marciana) ou passar logo os minerais que estão preste a se desintegrar.
+  * A sondagem não revela percentuais exatos: ela devolve faixas como `tracos`, `baixa`, `media` e `alta` por mineral.
+  * Sondar uma jazida disputa o mesmo gargalo das análises de carga.
+* **Mecânica a contornar:** Assimetria de Informação e Sistemas de Fila. Uma vez que o laboratório processa apenas um volume por vez e cada um leva um tempo diferente, novas cargas de transporte vão chegar o tempo inteiro. Na "mão", elas apodrecem.
+  Seu sistema precisará **implementar e gerenciar sua própria fila de prioridade inteligente**, ponderando quando vale a pena liberar faturamento agora e quando vale gastar ciclos para sondar uma jazida e melhorar as próximas decisões de transporte.
 
 ---
 
