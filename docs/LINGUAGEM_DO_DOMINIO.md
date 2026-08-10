@@ -135,6 +135,10 @@ Cada armazém guarda uma lista ordenada de identificadores em `Armazem.pilha`: �
 
 Essa distinção é o coração do sub-projeto. Antes existiam três rotas que escreviam ocupação sem referência a carga alguma, e uma delas aceitava qualquer número: dava para zerar um armazém cheio com um valor inventado. As três foram removidas.
 
+`GET /armazenagem/armazens` devolve a pilha, do fundo para o topo. A ordem é a variável de decisão do sub-projeto, então precisa ser legível no estado do mundo — reconstruí-la a partir do log de eventos trocaria estratégia por escrituração.
+
+Liberar mais espaço do que está ocupado levanta `OcupacaoInconsistenteError` em vez de zerar o contador. Não deveria ser alcançável: se for, alguém escreveu ocupação sem passar pela pilha.
+
 ## Retirada Destrutiva
 
 Alcançar carga enterrada desenterra tudo que está acima dela, e tudo o que sobe vai para a mão de quem pediu. Não existe retirada cirúrgica. Recolocar na pilha é decisão nova e paga.
@@ -173,5 +177,9 @@ Medido, a ordem certa rende cerca de **5% a mais**, e o que carrega essa diferen
 A chave para decidir *qual* ordem é a **perda de valor por ciclo** — `taxa_degradacao × sensibilidade_armazenagem × valor_por_unidade` — e ela não é a óbvia: sob ela o gelo de água supera o cristal marciano raro apesar de valer um quinto. Ressalva honesta: errar a chave custa 0.02%, porque gelo (25.2) e cristal (24.0) sangram quase igual. A direção é real, a magnitude é pequena, e fazer a chave pesar exige separar as taxas de perda em `minerais.json`.
 
 Como reordenar cobra por deslocamento e não por tamanho de pilha, atingir a ordem-alvo com **movimento mínimo** é uma otimização a mais: preservar a maior subsequência já correta e mover só o resto. Inverter cinco posições custa 12 movimentos; trocar as duas do topo custa 2.
+
+A cadeia completa é **perda de valor > preço > empilhar sem pensar**, e os degraus são desiguais de propósito: decidir organizar vale ~2.2%, escolher a chave certa vale ~0.025%.
+
+Guardar é escolha, não pedágio: minério extraído pode ser despachado e entregue sem nunca passar por um armazém. O que bloqueia transporte e entrega é a carga estar **guardada ou viajando**, não estar fora da mão — se toda produção fosse obrigada a passar pela pilha, o custo incidiria igual sobre qualquer estratégia e deixaria de distinguir uma da outra.
 
 Fixado por `mundo/testes/test_dominancia_de_armazenagem.py`.
