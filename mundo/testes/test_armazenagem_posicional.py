@@ -190,13 +190,15 @@ def test_receber_carga_move_para_em_armazem():
 
 
 def test_receber_carga_com_identificador_repetido_nao_deixa_pilha_inconsistente():
-    """Cobre o guard de duplicidade de `Armazem.empilhar` pela via da API.
+    """Um pedido com id repetido não pode deixar rastro nenhum.
 
-    Task 1 identificou que esse guard não tem teste dedicado e é
-    load-bearing: sem ele, a mesma carga entraria duas vezes na pilha e o
-    caminho de liberação decrementaria a ocupação duas vezes para uma única
-    carga física. `identificadores_das_cargas` com o mesmo id repetido é o
-    jeito de um participante disparar isso a partir do endpoint.
+    Sem checagem prévia, `empilhar` só descobre a repetição ao chegar na
+    segunda ocorrência — e a primeira já entrou, deixando a carga empilhada e
+    ocupando espaço enquanto o mundo registra a operação como inválida. Pior:
+    o custo já teria sido cobrado pelas duas.
+
+    Esta é a mesma classe de falha do débito depois de empilhar, por outra
+    porta: o que pode falhar tem que falhar antes de qualquer mutação.
     """
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
@@ -215,8 +217,9 @@ def test_receber_carga_com_identificador_repetido_nao_deixa_pilha_inconsistente(
 
         assert invalidas, "id repetido deveria publicar operacao_invalida"
         armazem = motor.armazens["armazem-1"]
-        assert armazem.pilha == ["c1"]
-        assert armazem.ocupacao == 10.0
+        assert armazem.pilha == [], "nada pode ter sido empilhado"
+        assert armazem.ocupacao == 0.0, "a ocupação não pode contar o que não entrou"
+        assert motor.cargas["c1"].local == LocalDaCarga.NA_MAO
 
 
 def test_retirar_devolve_o_alvo_e_tudo_acima_para_a_mao():

@@ -48,6 +48,19 @@ async def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
     def executar() -> None:
         motor.autorizacoes.consumir(requisicao.id_autorizacao, "receber_carga")
         custos = motor.catalogo_de_armazenagem
+
+        # O pedido é checado contra si mesmo antes de qualquer outra coisa. Sem
+        # isto, `empilhar` só descobre a repetição ao chegar na segunda
+        # ocorrência — e a primeira já entrou. Uma carga repetida também seria
+        # cobrada duas vezes antes de a operação ser rejeitada.
+        vistos = set()
+        for identificador in requisicao.identificadores_das_cargas:
+            if identificador in vistos:
+                raise ValueError(f"Carga repetida no pedido: {identificador}")
+            if identificador in armazem.pilha:
+                raise ValueError(f"Carga já está no armazém: {identificador}")
+            vistos.add(identificador)
+
         total = 0.0
         for identificador in requisicao.identificadores_das_cargas:
             carga = motor.cargas[identificador]
