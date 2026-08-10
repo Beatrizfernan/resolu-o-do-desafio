@@ -360,3 +360,55 @@ def test_nao_se_descarta_carga_que_ainda_esta_empilhada():
 
         assert "c1" in motor.cargas, "a carga não pode sumir enquanto está na pilha"
         assert motor.armazens["armazem-1"].pilha == ["c1"]
+
+
+def test_nao_se_transporta_carga_que_esta_enterrada():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = _preparar(cliente, {"c1": 1.0})
+        motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
+        cliente.post("/armazenagem/receber-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificadores_das_cargas": ["c1"],
+            "id_autorizacao": _autorizar(cliente),
+        })
+        motor.avancar_ciclo(1)
+        invalidas = []
+        motor.eventos.assinar(
+            lambda e: invalidas.append(e) if e.tipo == "operacao_invalida" else None
+        )
+
+        autorizacao = cliente.post("/missao/autorizar-missao", json={
+            "operacao": "iniciar_viagem", "central_solicitante": "transporte",
+        }).json()["id_autorizacao"]
+        cliente.post("/transporte/iniciar-viagem", json={
+            "identificador_da_unidade": "transportadora-1",
+            "identificador_da_rota": "rota-1",
+            "identificador_da_carga": "c1",
+            "id_autorizacao": autorizacao,
+        })
+        motor.avancar_ciclo(1)
+
+        assert invalidas, "transportar carga empilhada deveria ser inválido"
+
+
+def test_viagem_termina_com_a_carga_na_mao():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = _preparar(cliente, {"c1": 1.0})
+        motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
+
+        autorizacao = cliente.post("/missao/autorizar-missao", json={
+            "operacao": "iniciar_viagem", "central_solicitante": "transporte",
+        }).json()["id_autorizacao"]
+        cliente.post("/transporte/iniciar-viagem", json={
+            "identificador_da_unidade": "transportadora-1",
+            "identificador_da_rota": "rota-1",
+            "identificador_da_carga": "c1",
+            "id_autorizacao": autorizacao,
+        })
+        for _ in range(8):
+            motor.avancar_ciclo(1)
+
+        from mundo.dominio.cargas import LocalDaCarga
+        assert motor.cargas["c1"].local == LocalDaCarga.NA_MAO

@@ -119,6 +119,9 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
             raise ValueError("Rota interditada")
         if unidade.viagens_disponiveis <= 0:
             raise ValueError("Sem viagens disponíveis")
+        carga = motor.cargas[requisicao.identificador_da_carga]
+        if carga.local != LocalDaCarga.NA_MAO:
+            raise ValueError("Só se transporta carga que está na mão")
         perfil = motor.catalogo_de_modos.obter_transporte(requisicao.modo)
         custo = (
             CUSTO_ENERGETICO_VIAGEM
@@ -131,7 +134,6 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
         unidade.desgaste += motor.catalogo_de_modos.taxa_de_desgaste / perfil.mult_duracao
         unidade.viagens_disponiveis -= 1
         unidade.estado = EstadoDoRobo.EXECUTANDO
-        carga = motor.cargas[requisicao.identificador_da_carga]
         local_de_origem = carga.local
         carga.mover_para(LocalDaCarga.EM_TRANSITO, perfil.mult_degradacao)
         duracao = max(1, round(rota.tempo_base * perfil.mult_duracao))
@@ -155,7 +157,7 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
                 )
                 return
             carga_em_transito = motor.cargas[requisicao.identificador_da_carga]
-            carga_em_transito.mover_para(LocalDaCarga.EM_ARMAZEM)
+            carga_em_transito.mover_para(LocalDaCarga.NA_MAO)
             unidade.estado = EstadoDoRobo.RETORNANDO
             motor.eventos.publicar(
                 "transporte_concluido",

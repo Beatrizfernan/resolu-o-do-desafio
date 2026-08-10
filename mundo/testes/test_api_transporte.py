@@ -50,7 +50,7 @@ def test_consultar_cargas_disponiveis_lista_as_cargas_do_motor():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
 
         resposta = cliente.get("/transporte/cargas-disponiveis")
         assert resposta.json() == [
@@ -62,7 +62,7 @@ def test_planejar_transporte_lista_apenas_rotas_livres():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
         motor.rotas["rota-2"].condicao = CondicaoDaRota.INTERDITADA
 
         resposta = cliente.get("/transporte/planejar-transporte", params={"identificador_da_carga": "carga-1"})
@@ -80,7 +80,7 @@ def test_carregar_coloca_a_unidade_em_aguardando():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
 
         cliente.post("/transporte/carregar", json={
             "identificador_da_unidade": "transportadora-1", "identificador_da_carga": "carga-1",
@@ -94,7 +94,7 @@ def test_carregar_acima_da_capacidade_gera_operacao_invalida():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-pesada"] = CargaMineral("carga-pesada", "hematita", 150.0, 90.0)
+        motor.cargas["carga-pesada"] = CargaMineral("carga-pesada", "hematita", 150.0, 90.0, local=LocalDaCarga.NA_MAO)
 
         cliente.post("/transporte/carregar", json={
             "identificador_da_unidade": "transportadora-1", "identificador_da_carga": "carga-pesada",
@@ -109,7 +109,7 @@ def test_carregar_unidade_ocupada_gera_operacao_invalida():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
         motor.robos["transportadora-1"].estado = motor.robos["transportadora-1"].estado.EXECUTANDO
 
         cliente.post("/transporte/carregar", json={
@@ -134,7 +134,7 @@ def test_iniciar_viagem_exige_autorizacao_e_debita_viagem_disponivel():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
         energia_antes = motor.energia.consultar_energia("transporte")
 
         _iniciar_viagem(cliente, _autorizar(cliente))
@@ -149,7 +149,7 @@ def test_iniciar_viagem_sem_autorizacao_valida_gera_operacao_invalida():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
 
         _iniciar_viagem(cliente, "aut-inexistente")
         motor.avancar_ciclo(1)
@@ -163,7 +163,7 @@ def test_iniciar_viagem_rejeita_reuso_da_mesma_autorizacao():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
         id_autorizacao = _autorizar(cliente)
 
         _iniciar_viagem(cliente, id_autorizacao)
@@ -182,7 +182,7 @@ def test_iniciar_viagem_rejeita_autorizacao_de_outra_operacao():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
 
         _iniciar_viagem(cliente, _autorizar(cliente, operacao="solicitar_transporte"))
         motor.avancar_ciclo(1)
@@ -195,7 +195,7 @@ def test_iniciar_viagem_em_rota_interditada_gera_operacao_invalida():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
         motor.rotas["rota-1"].condicao = CondicaoDaRota.INTERDITADA
 
         _iniciar_viagem(cliente, _autorizar(cliente))
@@ -210,7 +210,7 @@ def test_iniciar_viagem_sem_viagens_disponiveis_gera_operacao_invalida():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
         motor.robos["transportadora-1"].viagens_disponiveis = 0
         energia_antes = motor.energia.consultar_energia("transporte")
 
@@ -258,7 +258,7 @@ def test_viagem_conclui_apos_o_tempo_base_degradando_a_carga():
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
         motor.cargas["carga-1"] = CargaMineral(
-            "carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.EM_JAZIDA,
+            "carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO,
         )
 
         _iniciar_viagem(cliente, _autorizar(cliente))
@@ -269,15 +269,18 @@ def test_viagem_conclui_apos_o_tempo_base_degradando_a_carga():
 
         assert "transporte_concluido" in _tipos_de_eventos(motor)
         assert motor.robos["transportadora-1"].estado.value == "retornando"
-        # A viagem move a carga para em_transito no ciclo 1 e a devolve ao armazém no
+        # A viagem move a carga para em_transito no ciclo 1 e a devolve à mão no
         # ciclo de chegada (1 + tempo_base = 6), antes da degradação daquele ciclo.
         # Em trânsito (ciclos 1..5, modo normal) a raridade também pesa:
         # 0.2 × 0.1 × 1.0 × 1.0 × (1 + 0.1 × 30) = 0.02 × 4.0 = 0.08 por ciclo → 0.4.
-        # No armazém (ciclo 6) a raridade não entra: 0.2 × 0.1 × 1.0 × 1.0 = 0.02.
-        # 90.0 - 0.4 - 0.02 = 89.58.
+        # Na mão (ciclo 6) a raridade não entra, mas a carga está exposta: usa
+        # sensibilidade 1.0 — não a de armazenagem — e multiplicador de local 2.0.
+        # 0.2 × 1.0 × 2.0 × 1.0 = 0.4 nesse único ciclo.
+        # 90.0 - 0.4 - 0.4 = 89.2. Estar na mão custa caro de propósito: é o que
+        # dá urgência a resolver o que foi desenterrado.
         carga = motor.cargas["carga-1"]
-        assert carga.local == LocalDaCarga.EM_ARMAZEM
-        assert carga.qualidade == pytest.approx(89.58)
+        assert carga.local == LocalDaCarga.NA_MAO
+        assert carga.qualidade == pytest.approx(89.2)
 
 
 def test_modo_rapido_chega_antes_e_gasta_mais_energia_que_o_economico():
@@ -289,7 +292,7 @@ def test_modo_rapido_chega_antes_e_gasta_mais_energia_que_o_economico():
         app = criar_app(com_loop_real_time=False)
         with TestClient(app) as cliente:
             motor = instancia_do_mundo.obter_motor()
-            motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+            motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
             motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
             energia_antes = motor.energia.consultar_energia("transporte")
 
@@ -308,14 +311,14 @@ def test_modo_rapido_chega_antes_e_gasta_mais_energia_que_o_economico():
     assert custos["rapido"] > custos["economico"]
 
 
-def test_carga_fica_em_transito_durante_a_viagem_e_volta_ao_armazem():
+def test_carga_fica_em_transito_durante_a_viagem_e_volta_para_a_mao():
     from mundo.api.dependencias import instancia_do_mundo
 
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
         motor.cargas["carga-1"] = CargaMineral(
-            "carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.EM_ARMAZEM,
+            "carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO,
         )
         motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
 
@@ -325,7 +328,7 @@ def test_carga_fica_em_transito_durante_a_viagem_e_volta_ao_armazem():
         assert motor.cargas["carga-1"].local == LocalDaCarga.EM_TRANSITO
 
         motor.avancar_ciclo(10)
-        assert motor.cargas["carga-1"].local == LocalDaCarga.EM_ARMAZEM
+        assert motor.cargas["carga-1"].local == LocalDaCarga.NA_MAO
 
 
 def test_transporte_economico_degrada_mais_a_carga_que_o_rapido():
@@ -337,7 +340,7 @@ def test_transporte_economico_degrada_mais_a_carga_que_o_rapido():
         with TestClient(app) as cliente:
             motor = instancia_do_mundo.obter_motor()
             motor.cargas["carga-1"] = CargaMineral(
-                "carga-1", "jarosita", 10.0, 100.0, local=LocalDaCarga.EM_ARMAZEM,
+                "carga-1", "jarosita", 10.0, 100.0, local=LocalDaCarga.NA_MAO,
             )
             motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
 
@@ -374,7 +377,7 @@ def test_abortar_viagem_meio_do_caminho_impede_entrega_e_publica_evento():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
-        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
         motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
 
         # Iniciar viagem
@@ -396,9 +399,10 @@ def test_abortar_viagem_meio_do_caminho_impede_entrega_e_publica_evento():
         # Avançar até o ciclo original de chegada (ciclo 1 + tempo_base = 6)
         motor.avancar_ciclo(motor.rotas["rota-1"].tempo_base - 1)
 
-        # A carga não deve ter chegado ao armazém: volta para o local de origem,
-        # em vez de ficar presa em trânsito degradando até zero.
-        assert motor.cargas["carga-1"].local == LocalDaCarga.EM_JAZIDA
+        # A carga não deve ter chegado ao destino: volta para o local de origem
+        # (na mão, pré-condição de Task 7), em vez de ficar presa em trânsito
+        # degradando até zero.
+        assert motor.cargas["carga-1"].local == LocalDaCarga.NA_MAO
         assert motor.robos["transportadora-1"].estado == EstadoDoRobo.RETORNANDO
 
         # Verificar que o evento viagem_abortada foi publicado
@@ -446,7 +450,7 @@ def test_abortar_viagem_devolve_a_carga_ao_local_de_origem_com_degradacao_neutra
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
         motor.cargas["carga-1"] = CargaMineral(
-            "carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.EM_ARMAZEM,
+            "carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO,
         )
         motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
 
@@ -462,7 +466,7 @@ def test_abortar_viagem_devolve_a_carga_ao_local_de_origem_com_degradacao_neutra
         # O aborto desfaz a partida por inteiro: a carga volta de onde saiu e o
         # multiplicador do modo não sobrevive à viagem que não aconteceu.
         assert "viagem_abortada" in _tipos_de_eventos(motor)
-        assert motor.cargas["carga-1"].local == LocalDaCarga.EM_ARMAZEM
+        assert motor.cargas["carga-1"].local == LocalDaCarga.NA_MAO
         assert motor.cargas["carga-1"].mult_degradacao_local == 1.0
 
 
@@ -474,7 +478,7 @@ def test_viagem_abortada_e_recebida_no_armazem_nao_reduz_a_degradacao_futura():
         app = criar_app(com_loop_real_time=False)
         with TestClient(app) as cliente:
             motor = mundo.obter_motor()
-            motor.cargas["carga-1"] = CargaMineral("carga-1", "gelo_de_agua", 10.0, 100.0)
+            motor.cargas["carga-1"] = CargaMineral("carga-1", "gelo_de_agua", 10.0, 100.0, local=LocalDaCarga.NA_MAO)
             motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
             motor.energia.alocar_energia("reserva_estrategica", "armazenagem", 100)
 

@@ -99,10 +99,11 @@ async def preparar_distribuicao(requisicao: RequisicaoDeDistribuicao) -> dict:
     def executar() -> None:
         motor.autorizacoes.consumir(requisicao.id_autorizacao, "preparar_distribuicao")
         carga = motor.cargas[requisicao.identificador_da_carga]
+        if carga.local != LocalDaCarga.NA_MAO:
+            raise ValueError("Só se distribui carga que está na mão")
         mineral = motor.catalogo_de_minerais.obter(carga.mineral)
         valor_entregue = carga.valor_efetivo(mineral.valor_por_unidade)
         motor.faturamento_total += valor_entregue
-        carga.mover_para(LocalDaCarga.ENTREGUE)
         motor.eventos.publicar("carga_entregue", motor.ciclo_atual, {
             "carga": carga.identificador, "valor_entregue": valor_entregue,
         })

@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
-from mundo.dominio.cargas import CargaMineral
+from mundo.dominio.cargas import CargaMineral, LocalDaCarga
 from mundo.dominio.modos import ModoDeTransporte
 from mundo.dominio.robos import EstadoDoRobo
 
@@ -76,6 +76,7 @@ def _valor_por_energia(modo: str, mineral: str, rota: str) -> float:
                 nome = f"carga-{despachadas}"
                 motor.cargas[nome] = CargaMineral(
                     nome, mineral, QUANTIDADE_POR_VIAGEM, 100.0,
+                    local=LocalDaCarga.NA_MAO,
                 )
                 cliente.post(
                     "/transporte/iniciar-viagem",
