@@ -130,4 +130,8 @@ def test_missao_dormente_nao_aloca():
         cliente.post("/missao/alocar-energia", json={"destino": "extracao", "quantidade": 50})
         motor.avancar_ciclo(1)
 
-        assert motor.energia.consultar_energia("extracao") < antes + 50
+        # Só o consumo do ciclo pode ter mexido no saldo. Afirmar apenas
+        # "menos que antes + 50" deixaria o teste passar com a alocação
+        # acontecendo, porque o consumo já derruba o total abaixo disso.
+        consumo = motor.catalogo_de_operacao.consumo_por_ciclo_da_central
+        assert motor.energia.consultar_energia("extracao") == pytest.approx(antes - consumo)
