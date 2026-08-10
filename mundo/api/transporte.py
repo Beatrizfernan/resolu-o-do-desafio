@@ -114,6 +114,10 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
         raise HTTPException(status_code=404, detail="Carga não encontrada")
 
     def executar() -> None:
+        # Central dormente não opera. A verificação vem antes de tudo, como
+        # todas as outras: o que pode falhar tem que falhar antes de mutar.
+        if not motor.energia.esta_operante(CENTRAL):
+            raise ValueError(f"Central {CENTRAL} dormente")
         motor.autorizacoes.consumir(requisicao.id_autorizacao, "iniciar_viagem")
         if rota.condicao != CondicaoDaRota.LIVRE:
             raise ValueError("Rota interditada")

@@ -53,6 +53,10 @@ async def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
             raise HTTPException(status_code=404, detail="Carga não encontrada")
 
     def executar() -> None:
+        # Central dormente não opera. A verificação vem antes de tudo, como
+        # todas as outras: o que pode falhar tem que falhar antes de mutar.
+        if not motor.energia.esta_operante(CENTRAL):
+            raise ValueError(f"Central {CENTRAL} dormente")
         motor.autorizacoes.consumir(requisicao.id_autorizacao, "receber_carga")
         custos = motor.catalogo_de_armazenagem
 
@@ -159,6 +163,10 @@ async def retirar_carga(requisicao: RequisicaoDeRetirada) -> dict:
         raise HTTPException(status_code=404, detail="Carga não encontrada")
 
     def executar() -> None:
+        # Central dormente não opera. A verificação vem antes de tudo, como
+        # todas as outras: o que pode falhar tem que falhar antes de mutar.
+        if not motor.energia.esta_operante(CENTRAL):
+            raise ValueError(f"Central {CENTRAL} dormente")
         motor.autorizacoes.consumir(requisicao.id_autorizacao, "retirar_carga")
         # A profundidade é medida antes de mexer na pilha: é ela que define o
         # preço, e depois de desempilhar não há mais o que medir.
