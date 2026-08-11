@@ -101,6 +101,18 @@ def test_planejar_transporte_de_carga_em_jazida_filtra_rotas_compativeis_com_a_o
         assert set(resposta.json()["rotas_disponiveis"]) == {"rota-2", "rota-alt-2"}
 
 
+def test_planejar_transporte_omite_rota_sem_capacidade_para_a_carga():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        rota_limitada = next(r for r in motor.rotas.values() if r.capacidade_maxima < 100.0)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", rota_limitada.capacidade_maxima + 1, 90.0, local=LocalDaCarga.NA_MAO)
+
+        resposta = cliente.get("/transporte/planejar-transporte", params={"identificador_da_carga": "carga-1"})
+
+        assert rota_limitada.identificador not in resposta.json()["rotas_disponiveis"]
+
+
 def test_planejar_transporte_com_carga_inexistente_retorna_404():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:

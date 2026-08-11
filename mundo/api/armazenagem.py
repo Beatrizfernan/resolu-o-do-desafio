@@ -91,6 +91,8 @@ async def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
             carga = motor.cargas[identificador]
             if carga.local == LocalDaCarga.EM_JAZIDA:
                 raise ValueError("Carga ainda está na jazida; transporte real é obrigatório antes da armazenagem")
+            if carga.local == LocalDaCarga.EM_TRANSITO:
+                raise ValueError("Carga ainda está em trânsito; a viagem precisa terminar antes da armazenagem")
             if not armazem.compativel_com(carga.mineral):
                 motor.eventos.publicar(
                     "carga_contaminada",

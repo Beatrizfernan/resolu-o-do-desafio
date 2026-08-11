@@ -83,7 +83,9 @@ async def planejar_transporte(identificador_da_carga: str) -> dict:
     rotas_livres = [
         rota.identificador
         for rota in motor.rotas.values()
-        if rota.condicao == CondicaoDaRota.LIVRE and (origem_compativel is None or rota.origem == origem_compativel)
+        if rota.condicao == CondicaoDaRota.LIVRE
+        and rota.capacidade_maxima >= carga.quantidade
+        and (origem_compativel is None or rota.origem == origem_compativel)
     ]
     return {"carga": carga.identificador, "rotas_disponiveis": rotas_livres}
 
