@@ -162,6 +162,35 @@ def test_missao_dormente_nao_aloca():
         assert motor.energia.consultar_energia("extracao") == pytest.approx(antes - consumo)
 
 
+def test_alocar_energia_para_a_propria_missao_ignora_contingencia():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        antes = motor.energia.consultar_energia("missao")
+
+        cliente.post("/missao/alocar-energia", json={
+            "destino": "missao",
+            "quantidade": 50,
+            "politica": "contingencia",
+        })
+        motor.avancar_ciclo(1)
+
+        consumo = motor.catalogo_de_operacao.consumo_por_ciclo_da_central
+        assert motor.energia.consultar_energia("missao") == pytest.approx(antes + 50 - consumo)
+
+
+def test_alocar_energia_rejeita_politica_invalida_na_borda_http():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        resposta = cliente.post("/missao/alocar-energia", json={
+            "destino": "extracao",
+            "quantidade": 20,
+            "politica": "qualquer-coisa",
+        })
+
+        assert resposta.status_code == 422
+
+
 def test_alocar_energia_com_politica_de_contingencia_mantem_colchao_na_missao():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:

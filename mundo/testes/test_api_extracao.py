@@ -59,6 +59,28 @@ def test_iniciar_extracao_e_aceita_e_processada_no_proximo_ciclo():
         assert motor.robos["mineradora-1"].estado.value == "aguardando"
 
 
+def test_iniciar_extracao_respeita_capacidade_da_mineradora():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        jazidas = cliente.get("/extracao/jazidas").json()
+        jazida_id = jazidas[0]["identificador"]
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 50)
+
+        cliente.post(
+            "/extracao/iniciar-extracao",
+            json={
+                "identificador_da_unidade": "mineradora-2",
+                "identificador_da_jazida": jazida_id,
+                "quantidade": 30.0,
+            },
+        )
+        motor.avancar_ciclo(1)
+
+        eventos = motor.eventos.consultar_eventos()
+        assert any(e.tipo == "operacao_invalida" and "Capacidade" in e.dados["motivo"] for e in eventos)
+
+
 def test_extracao_concluida_cria_carga_que_ja_degrada_no_ciclo_de_criacao():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:

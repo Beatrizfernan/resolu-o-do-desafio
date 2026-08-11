@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Literal
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -59,7 +60,7 @@ async def consultar_eventos(desde_ciclo: int = 0) -> list[dict]:
 class RequisicaoDeAlocacao(BaseModel):
     destino: str
     quantidade: int
-    politica: str = "pulso"
+    politica: Literal["pulso", "contingencia"] = "pulso"
 
 
 @router.post("/alocar-energia")
@@ -70,7 +71,7 @@ async def alocar_energia(requisicao: RequisicaoDeAlocacao) -> dict:
         if not motor.energia.esta_operante(CENTRAL):
             raise ValueError("Central de missão dormente: não há quem aloque")
         quantidade = requisicao.quantidade
-        if requisicao.politica == "contingencia":
+        if requisicao.politica == "contingencia" and requisicao.destino != CENTRAL:
             saldo_da_missao = motor.energia.consultar_energia(CENTRAL)
             quantidade = min(requisicao.quantidade, max(0.0, saldo_da_missao - COLCHAO_MINIMO_MISSAO))
             if quantidade <= 0:

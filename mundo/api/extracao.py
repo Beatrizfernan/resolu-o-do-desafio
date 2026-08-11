@@ -96,6 +96,8 @@ async def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
             raise ValueError("Unidade indisponível")
         if jazida.estado != EstadoDaJazida.DISPONIVEL:
             raise ValueError("Jazida não disponível")
+        if requisicao.quantidade > unidade.capacidade:
+            raise ValueError("Capacidade da unidade excedida")
         perfil = motor.catalogo_de_modos.obter_extracao(requisicao.modo)
         ajuste_do_perfil = AJUSTE_POR_PERFIL_DE_ESCAVACAO[requisicao.perfil_de_escavacao]
         # O desperdício do modo é consumido da jazida só na conclusão, mas precisa
