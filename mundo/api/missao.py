@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -16,6 +17,7 @@ from .dependencias import instancia_do_mundo, obter_motor
 router = APIRouter(prefix="/missao", tags=["missao"])
 CAMINHO_CATALOGO = Path(__file__).parent.parent / "config" / "minerais.json"
 CENTRAL = "missao"
+CUSTOS_DE_AUTORIZACAO_POR_CLASSE = {"rapida": 0.2, "segura": 0.5, "lote": 0.8}
 
 
 class RequisicaoDeResetarMundo(BaseModel):
@@ -76,6 +78,7 @@ async def alocar_energia(requisicao: RequisicaoDeAlocacao) -> dict:
 class RequisicaoDeAutorizacao(BaseModel):
     operacao: str
     central_solicitante: str
+    classe: Literal["rapida", "segura", "lote"] = "rapida"
 
 
 @router.post("/autorizar-missao")
@@ -87,10 +90,14 @@ async def autorizar_missao(requisicao: RequisicaoDeAutorizacao) -> dict:
     if not motor.energia.esta_operante(CENTRAL):
         raise HTTPException(status_code=400, detail="Central de missão dormente")
     try:
-        motor.energia.debitar(CENTRAL, motor.catalogo_de_operacao.custo_de_autorizacao)
+        motor.energia.debitar(CENTRAL, CUSTOS_DE_AUTORIZACAO_POR_CLASSE[requisicao.classe])
     except Exception as erro:
         raise HTTPException(status_code=400, detail=str(erro)) from erro
-    autorizacao = motor.autorizacoes.emitir(requisicao.operacao, requisicao.central_solicitante)
+    autorizacao = motor.autorizacoes.emitir(
+        requisicao.operacao,
+        requisicao.central_solicitante,
+        classe=requisicao.classe,
+    )
     return {"id_autorizacao": autorizacao.identificador}
 
 

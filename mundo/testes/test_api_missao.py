@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from mundo.api.app import criar_app
 from mundo.api.dependencias import instancia_do_mundo
+from mundo.dominio.autorizacao import RegistroDeAutorizacoes
 from mundo.dominio.energia import GerenciadorDeEnergia
 
 
@@ -85,6 +86,30 @@ def test_autorizar_debita_o_custo_da_missao():
 
         gasto = antes - motor.energia.consultar_energia("missao")
         assert gasto == pytest.approx(motor.catalogo_de_operacao.custo_de_autorizacao)
+
+
+def test_autorizacao_segura_custa_mais_que_rapida():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        antes = motor.energia.consultar_energia("missao")
+
+        cliente.post("/missao/autorizar-missao", json={
+            "operacao": "iniciar_viagem",
+            "central_solicitante": "transporte",
+            "classe": "segura",
+        })
+
+        gasto_segura = antes - motor.energia.consultar_energia("missao")
+        assert gasto_segura > motor.catalogo_de_operacao.custo_de_autorizacao
+
+
+def test_autorizacao_em_lote_registra_classe_no_registro():
+    registro = RegistroDeAutorizacoes()
+
+    autorizacao = registro.emitir("receber_carga", "armazenagem", classe="lote")
+
+    assert autorizacao.classe == "lote"
 
 
 def test_missao_dormente_nao_emite_autorizacao():

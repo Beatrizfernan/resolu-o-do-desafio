@@ -13,6 +13,7 @@ class Autorizacao:
     identificador: str
     operacao: str
     central_solicitante: str
+    classe: str = "rapida"
     usada: bool = False
 
 
@@ -21,9 +22,9 @@ class RegistroDeAutorizacoes:
         self._contador = itertools.count(1)
         self._autorizacoes: dict[str, Autorizacao] = {}
 
-    def emitir(self, operacao: str, central_solicitante: str) -> Autorizacao:
+    def emitir(self, operacao: str, central_solicitante: str, classe: str = "rapida") -> Autorizacao:
         identificador = f"aut-{next(self._contador)}"
-        autorizacao = Autorizacao(identificador, operacao, central_solicitante)
+        autorizacao = Autorizacao(identificador, operacao, central_solicitante, classe)
         self._autorizacoes[identificador] = autorizacao
         return autorizacao
 
@@ -32,5 +33,9 @@ class RegistroDeAutorizacoes:
         if autorizacao is None or autorizacao.usada or autorizacao.operacao != operacao:
             raise AutorizacaoInvalidaError(identificador)
         self._autorizacoes[identificador] = Autorizacao(
-            autorizacao.identificador, autorizacao.operacao, autorizacao.central_solicitante, usada=True,
+            autorizacao.identificador,
+            autorizacao.operacao,
+            autorizacao.central_solicitante,
+            autorizacao.classe,
+            usada=True,
         )
