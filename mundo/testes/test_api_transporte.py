@@ -137,6 +137,22 @@ def test_carregar_acima_da_capacidade_gera_operacao_invalida():
         assert motor.robos["transportadora-1"].estado.value == "disponivel"
 
 
+def test_iniciar_viagem_rejeita_carga_acima_da_capacidade_da_transportadora_mesmo_em_rota_pesada():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        rota = next(r for r in motor.rotas.values() if r.capacidade_maxima > motor.robos["transportadora-1"].capacidade)
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 110.0, 90.0, local=LocalDaCarga.NA_MAO)
+        motor.energia.alocar_energia("reserva_estrategica", "transporte", 50)
+
+        _iniciar_viagem(cliente, _autorizar(cliente), identificador_da_rota=rota.identificador)
+        motor.avancar_ciclo(1)
+
+        assert "operacao_invalida" in _tipos_de_eventos(motor)
+        assert motor.robos["transportadora-1"].viagens_disponiveis == 10
+        assert motor.robos["transportadora-1"].estado.value == "disponivel"
+
+
 def test_carregar_unidade_ocupada_gera_operacao_invalida():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:

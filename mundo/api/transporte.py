@@ -156,6 +156,8 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
                 raise ValueError("Jazida de origem da carga não encontrada")
             if rota.origem != jazida_de_origem.localizacao:
                 raise ValueError("Rota incompatível com a origem da carga")
+        if carga.quantidade > unidade.capacidade:
+            raise ValueError("Capacidade da unidade excedida")
         if carga.quantidade > rota.capacidade_maxima:
             raise ValueError("Carga excede a capacidade da rota")
         perfil = motor.catalogo_de_modos.obter_transporte(requisicao.modo)
