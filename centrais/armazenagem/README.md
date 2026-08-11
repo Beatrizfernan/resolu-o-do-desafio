@@ -103,6 +103,8 @@ Validacoes reais:
 - `id_autorizacao` precisa ser valido para `receber_carga`;
 - o mesmo identificador nao pode se repetir no mesmo pedido;
 - a carga nao pode ja estar na pilha do armazem;
+- **a carga nao pode estar em `EM_JAZIDA`** (transporte real e obrigatorio antes da armazenagem);
+- **a carga nao pode estar em `EM_TRANSITO`** (a viagem precisa terminar antes da armazenagem);
 - o volume total do pedido nao pode exceder a capacidade restante;
 - cada carga precisa ser compativel com o armazem;
 - se `nova_ordem` for enviada, ela precisa ser uma permutacao valida da pilha resultante;

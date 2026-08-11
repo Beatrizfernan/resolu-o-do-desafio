@@ -104,12 +104,18 @@ Response JSON de exemplo:
 
 Aceita uma transferencia de energia da `reserva_estrategica` para outra central. A alteracao de saldo entra no tick seguinte.
 
+Suporta **politicas de repasse**:
+
+- `pulso` (padrao): transfere exatamente a quantidade pedida.
+- `contingencia`: mantem um colchao minimo de `5.0` na Missao. Se o repasse pedido esgotaria esse colchao, a quantidade e reduzida automaticamente. Nao se aplica quando o destino e a propria `missao` — repor a si mesma nunca e limitado.
+
 Request JSON:
 
 ```json
 {
   "destino": "transporte",
-  "quantidade": 50
+  "quantidade": 50,
+  "politica": "contingencia"
 }
 ```
 
@@ -123,14 +129,21 @@ Response JSON:
 
 ### `POST /missao/autorizar-missao`
 
-Emite um identificador de autorizacao para a operacao e central solicitante.
+Emite um identificador de autorizacao para a operacao e central solicitante. Agora suporta **classes de autorizacao** com custos distintos.
+
+Campos aceitos:
+
+- `operacao`: nome da operacao que consumira a autorizacao (ex: `iniciar_viagem`, `receber_carga`).
+- `central_solicitante`: central que usara a autorizacao (ex: `transporte`, `armazenagem`).
+- `classe`: `rapida` (custo `0.2`, padrao), `segura` (custo `0.5`) ou `lote` (custo `0.8`).
 
 Request JSON:
 
 ```json
 {
   "operacao": "iniciar_viagem",
-  "central_solicitante": "transporte"
+  "central_solicitante": "transporte",
+  "classe": "segura"
 }
 ```
 
@@ -145,7 +158,8 @@ Response JSON:
 Erros atuais:
 
 - `400` quando a Central de Missao esta dormente;
-- `400` quando nao ha energia suficiente para pagar o custo de autorizacao.
+- `400` quando nao ha energia suficiente para pagar o custo da classe de autorizacao;
+- `422` quando `classe` nao e um valor valido.
 
 ### `POST /missao/registrar-webhook`
 

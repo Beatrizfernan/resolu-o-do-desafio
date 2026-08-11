@@ -34,7 +34,24 @@ A central de transporte expõe contratos para consultar rotas, unidades e cargas
 
 ### `GET /transporte/rotas`
 
-Retorna todas as rotas cadastradas.
+Retorna todas as rotas cadastradas. A malha e hibrida: `10` rotas fixas equilibradas e `10` rotas variantes distribuidas por seed, cada uma com perfil proprio de custo, degradacao, desgaste e capacidade.
+
+Campos na resposta:
+
+- `identificador`: nome da rota (`rota-1` a `rota-10` para fixas, `rota-alt-1` a `rota-alt-10` para variantes).
+- `origem`: setor de partida.
+- `destino`: `central-distribuicao`.
+- `distancia`: distancia da rota.
+- `tempo_base`: ciclos base da viagem antes do modo.
+- `perfil`: nome do perfil (`padrao` para fixas; `blindada`, `economica`, `turbo`, etc. para variantes).
+- `tipo`: `fixa` ou `variante`.
+- `vantagem`, `desvantagem`: descricao textual do trade-off da rota.
+- `custo_energia_base`: custo energetico antes do multiplicador do modo.
+- `multiplicador_degradacao`: quanto a rota acelera ou retarda a perda de qualidade.
+- `multiplicador_desgaste`: quanto a rota castiga a transportadora.
+- `capacidade_maxima`: teto de carga que a rota suporta.
+- `risco`: probabilidade de eventos adversos na rota.
+- `condicao`: `livre` ou `interditada`.
 
 Exemplo de resposta:
 
@@ -42,13 +59,57 @@ Exemplo de resposta:
 [
   {
     "identificador": "rota-1",
-    "origem": "jazida-1",
-    "destino": "base-1",
-    "distancia": 10,
+    "origem": "setor-1",
+    "destino": "central-distribuicao",
+    "distancia": 10.0,
+    "tempo_base": 5,
+    "perfil": "padrao",
+    "tipo": "fixa",
+    "vantagem": "Equilibrada e previsivel",
+    "desvantagem": "Nao se destaca em custo, desgaste nem preservacao",
+    "custo_energia_base": 3.0,
+    "multiplicador_degradacao": 1.0,
+    "multiplicador_desgaste": 1.0,
+    "capacidade_maxima": 100.0,
+    "risco": 0.05,
+    "condicao": "livre"
+  },
+  {
+    "identificador": "rota-alt-1",
+    "origem": "setor-1",
+    "destino": "central-distribuicao",
+    "distancia": 8.0,
+    "tempo_base": 4,
+    "perfil": "abrasiva",
+    "tipo": "variante",
+    "vantagem": "E curta e relativamente barata",
+    "desvantagem": "Aumenta bastante a degradacao da carga",
+    "custo_energia_base": 2.6,
+    "multiplicador_degradacao": 1.7,
+    "multiplicador_desgaste": 1.0,
+    "capacidade_maxima": 110.0,
+    "risco": 0.07,
     "condicao": "livre"
   }
 ]
 ```
+
+### Perfis variantes de rota
+
+Perfis disponiveis no catalogo (sorteados por seed):
+
+| Perfil | Vantagem principal | Desvantagem principal | Custo energia | Mult. degradacao | Mult. desgaste | Capacidade |
+| --- | --- | --- | --- | --- | --- | --- |
+| `blindada` | Preserva qualidade | Mais energia, menos capacidade | 4.8 | 0.45 | 1.1 | 80 |
+| `economica` | Baixo custo energetico | Degrada mais a carga | 2.0 | 1.35 | 0.9 | 100 |
+| `turbo` | Chega mais rapido | Desgaste alto na transportadora | 4.2 | 0.75 | 1.8 | 90 |
+| `pesada` | Alta capacidade | Mais energia e degradacao | 4.0 | 1.1 | 1.2 | 140 |
+| `tecnica` | Minima degradacao | Castiga muito o robo | 4.5 | 0.55 | 2.2 | 70 |
+| `abrasiva` | Curta e barata | Muita perda de qualidade | 2.6 | 1.7 | 1.0 | 110 |
+| `panoramica` | Poupa o robo | Mais lenta | 3.2 | 0.85 | 0.8 | 100 |
+| `corredor_frio` | Bom p/ material sensivel | Energia acima da media | 3.9 | 0.65 | 1.4 | 85 |
+| `manutencao_leve` | Reduz desgaste | Viagem mais lenta | 3.4 | 1.1 | 0.55 | 95 |
+| `expressa_fragil` | Muito rapida | Capacidade baixa, alta degradacao | 3.6 | 1.45 | 1.9 | 75 |
 
 ### `GET /transporte/transportadores`
 
@@ -85,14 +146,17 @@ Exemplo de resposta:
 
 ### `GET /transporte/planejar-transporte?identificador_da_carga=carga-1`
 
-Retorna a carga consultada e as rotas com `condicao == "livre"`.
+Retorna a carga consultada e as rotas com `condicao == "livre"`. Filtra automaticamente:
+
+- rotas cuja `origem` e incompativel com a jazida de origem da carga, quando a carga esta em `EM_JAZIDA`;
+- rotas cuja `capacidade_maxima` e menor que a quantidade da carga.
 
 Exemplo de resposta:
 
 ```json
 {
   "carga": "carga-1",
-  "rotas_disponiveis": ["rota-1"]
+  "rotas_disponiveis": ["rota-1", "rota-alt-1"]
 }
 ```
 
@@ -155,19 +219,23 @@ Pre-condicoes reais:
 - a rota precisa existir, senao a API retorna `404 Unidade ou rota nao encontrada`;
 - a carga precisa existir, senao a API retorna `404 Carga nao encontrada`;
 - a central `transporte` precisa estar operante;
-- a autorizacao precisa existir, ser compativel com `iniciar_viagem` e nao pode ter sido consumida antes;
+- a autorizacao precisa ser valida para `iniciar_viagem` e nao pode ter sido consumida antes;
 - a rota precisa estar com `condicao == "livre"`;
 - a unidade precisa ter `viagens_disponiveis > 0`;
-- a carga nao pode estar em `EM_ARMAZEM` nem em `EM_TRANSITO`.
+- a carga nao pode estar em `EM_ARMAZEM` nem em `EM_TRANSITO`;
+- a carga nao pode exceder a capacidade da unidade transportadora;
+- a carga nao pode exceder a capacidade maxima da rota;
+- se a carga estiver em `EM_JAZIDA`, a `origem` da rota precisa ser compativel com a `localizacao` da jazida de origem.
 
 Efeitos aplicados pelo comando:
 
 - consome a autorizacao;
-- debita energia da central `transporte`;
+- debita energia da central `transporte` usando `custo_energia_base` da rota;
+- acumula desgaste na unidade considerando o `multiplicador_desgaste` da rota;
 - decrementa `viagens_disponiveis` da unidade;
 - move a unidade para `executando`;
-- move a carga para `EM_TRANSITO`;
-- agenda a conclusao da viagem para um ciclo futuro de acordo com a rota e o `modo`.
+- move a carga para `EM_TRANSITO` com degradacao que combina o modo e o `multiplicador_degradacao` da rota;
+- agenda a conclusao da viagem para um ciclo futuro de acordo com o `tempo_base` da rota e o `modo`.
 
 Quando a viagem conclui sem aborto:
 

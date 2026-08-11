@@ -13,9 +13,60 @@ Esta central consulta jazidas e agenda operacoes de extracao por unidade minerad
 
 - `GET /extracao/jazidas`
 - `GET /extracao/jazidas/{identificador}`
+- `GET /extracao/mineradoras`
 - `POST /extracao/iniciar-extracao`
 - `POST /extracao/interromper-extracao`
 - `POST /extracao/retornar-unidade`
+
+## Consultar mineradoras
+
+`GET /extracao/mineradoras`
+
+Retorna as unidades mineradoras com tipo, estado, localizacao, desgaste e capacidade.
+
+Response JSON:
+
+```json
+[
+  {
+    "identificador": "mineradora-1",
+    "estado": "disponivel",
+    "localizacao": "base",
+    "desgaste": 0.0,
+    "capacidade": 35.0,
+    "tipo": "leve"
+  },
+  {
+    "identificador": "mineradora-2",
+    "estado": "disponivel",
+    "localizacao": "base",
+    "desgaste": 0.0,
+    "capacidade": 25.0,
+    "tipo": "precisa"
+  }
+]
+```
+
+Python com `requests`:
+
+```python
+import requests
+
+BASE_URL = "http://localhost:8000"
+
+resposta = requests.get(f"{BASE_URL}/extracao/mineradoras")
+resposta.raise_for_status()
+print(resposta.json())
+```
+
+### Tipos de mineradora
+
+O mundo dispoe de dois tipos de mineradora com caracteristicas distintas:
+
+- `leve` (`mineradora-1`): rapida, barata, capacidade `35.0`. Ideal para throughput.
+- `precisa` (`mineradora-2`): mais lenta, preserva mais qualidade inicial, capacidade `25.0`. Ideal para minerais valiosos.
+
+Casar o tipo de mineradora com a jazida e o mineral e uma decisao economica real.
 
 ## Consultar jazidas
 
@@ -97,8 +148,9 @@ Campos aceitos:
 
 - `identificador_da_unidade`: unidade mineradora usada na operacao.
 - `identificador_da_jazida`: jazida consumida pela operacao.
-- `quantidade`: quantidade solicitada para a carga.
+- `quantidade`: quantidade solicitada para a carga. Nao pode exceder a capacidade da mineradora.
 - `modo`: `cuidadoso`, `normal` ou `agressivo`. Quando omitido, o default e `normal`.
+- `perfil_de_escavacao`: `superficial` (padrao), `profunda` (+25% energia, +4 de qualidade inicial) ou `mapeadora` (+10% energia, +2 de qualidade inicial).
 
 Response JSON imediata:
 
@@ -132,7 +184,20 @@ Validacoes implementadas durante a execucao do comando:
 - a central precisa estar operante na energia;
 - a unidade precisa estar `disponivel`;
 - a jazida precisa estar `disponivel`;
+- a quantidade nao pode exceder a capacidade da unidade;
 - o consumo previsto da jazida precisa caber no saldo atual.
+
+Request JSON de exemplo com todos os campos:
+
+```json
+{
+  "identificador_da_unidade": "mineradora-1",
+  "identificador_da_jazida": "jazida-1",
+  "quantidade": 20,
+  "modo": "normal",
+  "perfil_de_escavacao": "profunda"
+}
+```
 
 Se a unidade ou a jazida nao existirem, a API responde `404` com `{"detail": "Unidade ou jazida não encontrada"}`.
 

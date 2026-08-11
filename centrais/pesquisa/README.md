@@ -32,12 +32,18 @@ Pre-condicoes implementadas:
 - a carga precisa existir;
 - a central `pesquisa` precisa estar operante;
 - precisa haver slot livre na capacidade compartilhada;
-- a energia debitada depende de `custo_base_de_analise * mineral.custo_extracao`.
+- a energia debitada depende de `custo_base_de_analise * mineral.custo_extracao * ajuste_do_tipo`.
+
+Suporta **tipos de analise**:
+
+- `rapida`: metade da duracao, 80% do custo. Libera caixa antes, mas nao altera a qualidade.
+- `completa`: padrao, duracao e custo normais.
+- `forense`: 50% mais longa, 140% do custo. Pode justificar-se em minerais raros.
 
 Comportamento implementado:
 
 - a carga entra em `analises_em_andamento`;
-- a duracao depende de `mineral.ciclos_de_analise`;
+- a duracao depende de `mineral.ciclos_de_analise` e do `tipo_de_analise`;
 - ao concluir, a carga fica com `analisada = True`;
 - ao concluir, a central publica `analise_concluida`.
 
@@ -45,7 +51,8 @@ Payload de requisicao:
 
 ```json
 {
-  "identificador_da_carga": "carga-1"
+  "identificador_da_carga": "carga-1",
+  "tipo_de_analise": "rapida"
 }
 ```
 
@@ -104,11 +111,27 @@ Pre-condicoes implementadas:
 
 - a carga precisa existir no momento da execucao do comando;
 - a carga precisa ter sido analisada;
-- a qualidade precisa ser maior ou igual ao limiar atual `40.0`.
+- a qualidade precisa ser maior ou igual ao limiar da politica escolhida.
+
+Suporta **politicas de aprovacao**:
+
+- `comercial` (limiar `40.0`, padrao): aprova material com qualidade moderada.
+- `estrita` (limiar `70.0`): barra material degradado que passaria na comercial.
+- `premium` (limiar `85.0`): so aprova lotes de altissima qualidade.
+
+Payload de requisicao:
+
+```json
+{
+  "identificador_da_carga": "carga-1",
+  "politica": "estrita"
+}
+```
 
 Comportamento implementado:
 
-- quando as pre-condicoes sao atendidas, a central publica `carga_aprovada`.
+- quando as pre-condicoes sao atendidas, a carga fica com `aprovada = True` e a central publica `carga_aprovada`.
+- quando a qualidade e insuficiente para a politica, publica `operacao_invalida`.
 
 ### `POST /pesquisa/rejeitar-carga`
 
@@ -129,6 +152,7 @@ Pre-condicoes implementadas:
 - a autorizacao precisa ser valida, nao reutilizada e emitida para a operacao `preparar_distribuicao`;
 - a carga precisa existir no momento da execucao do comando;
 - a carga precisa ter sido analisada;
+- a carga precisa ter sido aprovada (`POST /pesquisa/aprovar-carga` executado com sucesso);
 - a carga nao pode estar `EM_ARMAZEM` nem `EM_TRANSITO`.
 
 Comportamento implementado:
