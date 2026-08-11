@@ -207,6 +207,21 @@ def test_aprovar_carga_analisada():
         assert motor.cargas["carga-1"].aprovada is True
 
 
+def test_politica_estrita_exige_qualidade_maior_que_a_comercial():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 60.0, local=LocalDaCarga.NA_MAO, analisada=True)
+
+        cliente.post("/pesquisa/aprovar-carga", json={
+            "identificador_da_carga": "carga-1",
+            "politica": "estrita",
+        })
+        motor.avancar_ciclo(1)
+
+        assert any(e.tipo == "operacao_invalida" for e in motor.eventos.consultar_eventos())
+
+
 def test_rejeitar_carga_nao_analisada_gera_erro():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:

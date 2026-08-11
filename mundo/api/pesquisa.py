@@ -36,6 +36,11 @@ class RequisicaoDeSondagem(BaseModel):
     identificador_da_jazida: str
 
 
+class RequisicaoDeAprovacao(BaseModel):
+    identificador_da_carga: str
+    politica: Literal["comercial", "estrita", "premium"] = "comercial"
+
+
 @router.post("/iniciar-analise")
 async def iniciar_analise(requisicao: RequisicaoDeAnalise) -> dict:
     motor = obter_motor()
@@ -153,7 +158,7 @@ async def classificar_carga(requisicao: RequisicaoDeAnalise) -> dict:
 
 
 @router.post("/aprovar-carga")
-async def aprovar_carga(requisicao: RequisicaoDeAnalise) -> dict:
+async def aprovar_carga(requisicao: RequisicaoDeAprovacao) -> dict:
     motor = obter_motor()
 
     def executar() -> None:
@@ -163,7 +168,12 @@ async def aprovar_carga(requisicao: RequisicaoDeAnalise) -> dict:
         if not carga.analisada:
             raise ValueError("Carga não analisada")
             
-        limiar = motor.catalogo_de_pesquisa.limiar_qualidade_aprovacao
+        politicas_de_aprovacao = {
+            "comercial": motor.catalogo_de_pesquisa.limiar_qualidade_aprovacao,
+            "estrita": 70.0,
+            "premium": 85.0,
+        }
+        limiar = politicas_de_aprovacao[requisicao.politica]
         if carga.qualidade < limiar:
             raise ValueError("Qualidade insuficiente para aprovação")
 
