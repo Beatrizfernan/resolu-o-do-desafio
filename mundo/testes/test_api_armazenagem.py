@@ -23,7 +23,7 @@ def _receber_carga(
 ):
     motor = instancia_do_mundo.obter_motor()
     motor.cargas[identificador_da_carga] = CargaMineral(
-        identificador_da_carga, mineral, quantidade, qualidade,
+        identificador_da_carga, mineral, quantidade, qualidade, local=LocalDaCarga.NA_MAO,
     )
     motor.energia.alocar_energia("reserva_estrategica", "armazenagem", 200)
     return cliente.post("/armazenagem/receber-carga", json={
@@ -205,7 +205,7 @@ def test_receber_carga_normaliza_o_multiplicador_de_degradacao_do_local():
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
         motor.cargas["carga-1"] = CargaMineral(
-            "carga-1", "hematita", 20.0, 90.0, mult_degradacao_local=0.5,
+            "carga-1", "hematita", 20.0, 90.0, local=LocalDaCarga.NA_MAO, mult_degradacao_local=0.5,
         )
         motor.energia.alocar_energia("reserva_estrategica", "armazenagem", 200)
 

@@ -100,6 +100,28 @@ def test_receber_empilha_na_ordem_dada_e_cobra_por_unidade():
         assert gasto == pytest.approx(esperado)
 
 
+def test_receber_carga_em_jazida_gera_operacao_invalida():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "armazenagem", 100)
+        motor.cargas["c1"] = CargaMineral(
+            "c1", "hematita", 10.0, 100.0, local=LocalDaCarga.EM_JAZIDA
+        )
+
+        cliente.post("/armazenagem/receber-carga", json={
+            "identificador_do_armazem": "armazem-1",
+            "identificadores_das_cargas": ["c1"],
+            "id_autorizacao": _autorizar(cliente),
+        })
+        motor.avancar_ciclo(1)
+
+        eventos = motor.eventos.consultar_eventos()
+        assert any(e.tipo == "operacao_invalida" and "jazida" in e.dados["motivo"] for e in eventos)
+        assert motor.armazens["armazem-1"].pilha == []
+        assert motor.cargas["c1"].local == LocalDaCarga.EM_JAZIDA
+
+
 def test_nova_ordem_reordena_a_pilha_e_cobra_por_movimento():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:

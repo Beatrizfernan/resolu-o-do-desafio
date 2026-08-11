@@ -30,13 +30,22 @@ def _iniciar_viagem(cliente, id_autorizacao: str, **campos) -> None:
     cliente.post("/transporte/iniciar-viagem", json=corpo)
 
 
-def test_consultar_rotas_retorna_duas_rotas():
+def test_consultar_rotas_retorna_malha_hibrida_com_campos_estrategicos():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         resposta = cliente.get("/transporte/rotas")
-        assert len(resposta.json()) == 2
-        assert {r["identificador"] for r in resposta.json()} == {"rota-1", "rota-2"}
-        assert all(r["condicao"] == "livre" for r in resposta.json())
+        rotas = resposta.json()
+        assert len(rotas) >= 20
+        assert {"rota-1", "rota-2", "rota-alt-1", "rota-alt-2"}.issubset({r["identificador"] for r in rotas})
+        assert all(r["condicao"] == "livre" for r in rotas)
+        assert all("perfil" in r for r in rotas)
+        assert all("vantagem" in r for r in rotas)
+        assert all("desvantagem" in r for r in rotas)
+        assert all("custo_energia_base" in r for r in rotas)
+        assert all("multiplicador_degradacao" in r for r in rotas)
+        assert all("multiplicador_desgaste" in r for r in rotas)
+        assert all("capacidade_maxima" in r for r in rotas)
+        assert all("tipo" in r for r in rotas)
 
 
 def test_consultar_transportadores_ignora_unidades_mineradoras():
@@ -64,9 +73,32 @@ def test_planejar_transporte_lista_apenas_rotas_livres():
         motor = instancia_do_mundo.obter_motor()
         motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
         motor.rotas["rota-2"].condicao = CondicaoDaRota.INTERDITADA
+        motor.rotas["rota-alt-2"].condicao = CondicaoDaRota.INTERDITADA
 
         resposta = cliente.get("/transporte/planejar-transporte", params={"identificador_da_carga": "carga-1"})
-        assert resposta.json() == {"carga": "carga-1", "rotas_disponiveis": ["rota-1"]}
+        corpo = resposta.json()
+        assert corpo["carga"] == "carga-1"
+        assert "rota-2" not in corpo["rotas_disponiveis"]
+        assert "rota-alt-2" not in corpo["rotas_disponiveis"]
+        assert "rota-1" in corpo["rotas_disponiveis"]
+
+
+def test_planejar_transporte_de_carga_em_jazida_filtra_rotas_compativeis_com_a_origem():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 100)
+
+        cliente.post("/extracao/iniciar-extracao", json={
+            "identificador_da_unidade": "mineradora-1",
+            "identificador_da_jazida": "jazida-2",
+            "quantidade": 10.0,
+        })
+        motor.avancar_ciclo(6)
+        carga = next(iter(motor.cargas.values()))
+
+        resposta = cliente.get("/transporte/planejar-transporte", params={"identificador_da_carga": carga.identificador})
+        assert set(resposta.json()["rotas_disponiveis"]) == {"rota-2", "rota-alt-2"}
 
 
 def test_planejar_transporte_com_carga_inexistente_retorna_404():
@@ -146,6 +178,24 @@ def test_iniciar_viagem_exige_autorizacao_e_debita_viagem_disponivel():
         consumo = motor.catalogo_de_operacao.consumo_por_ciclo_da_central
         assert motor.energia.consultar_energia("transporte") == pytest.approx(
             energia_antes - 3 - consumo
+        )
+
+
+def test_iniciar_viagem_aplica_o_custo_base_da_rota_escolhida():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
+        motor.energia.alocar_energia("reserva_estrategica", "transporte", 100)
+        energia_antes = motor.energia.consultar_energia("transporte")
+        rota = motor.rotas["rota-alt-1"]
+
+        _iniciar_viagem(cliente, _autorizar(cliente), identificador_da_rota="rota-alt-1")
+        motor.avancar_ciclo(1)
+
+        consumo = motor.catalogo_de_operacao.consumo_por_ciclo_da_central
+        assert motor.energia.consultar_energia("transporte") == pytest.approx(
+            energia_antes - rota.custo_energia_base - consumo
         )
 
 

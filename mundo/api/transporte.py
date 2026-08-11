@@ -25,6 +25,16 @@ async def consultar_rotas() -> list[dict]:
             "origem": rota.origem,
             "destino": rota.destino,
             "distancia": rota.distancia,
+            "tempo_base": rota.tempo_base,
+            "perfil": rota.perfil,
+            "tipo": "fixa" if rota.fixa else "variante",
+            "vantagem": rota.vantagem,
+            "desvantagem": rota.desvantagem,
+            "custo_energia_base": rota.custo_energia_base,
+            "multiplicador_degradacao": rota.multiplicador_degradacao,
+            "multiplicador_desgaste": rota.multiplicador_desgaste,
+            "capacidade_maxima": rota.capacidade_maxima,
+            "risco": rota.risco,
             "condicao": rota.condicao.value,
         }
         for rota in motor.rotas.values()
@@ -65,8 +75,15 @@ async def planejar_transporte(identificador_da_carga: str) -> dict:
     carga = motor.cargas.get(identificador_da_carga)
     if carga is None:
         raise HTTPException(status_code=404, detail="Carga não encontrada")
+    origem_compativel = None
+    if carga.local == LocalDaCarga.EM_JAZIDA and carga.origem_jazida is not None:
+        jazida = motor.jazidas.get(carga.origem_jazida)
+        if jazida is not None:
+            origem_compativel = jazida.localizacao
     rotas_livres = [
-        rota.identificador for rota in motor.rotas.values() if rota.condicao == CondicaoDaRota.LIVRE
+        rota.identificador
+        for rota in motor.rotas.values()
+        if rota.condicao == CondicaoDaRota.LIVRE and (origem_compativel is None or rota.origem == origem_compativel)
     ]
     return {"carga": carga.identificador, "rotas_disponiveis": rotas_livres}
 
@@ -139,20 +156,29 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
                 raise ValueError("Jazida de origem da carga não encontrada")
             if rota.origem != jazida_de_origem.localizacao:
                 raise ValueError("Rota incompatível com a origem da carga")
+        if carga.quantidade > rota.capacidade_maxima:
+            raise ValueError("Carga excede a capacidade da rota")
         perfil = motor.catalogo_de_modos.obter_transporte(requisicao.modo)
         custo = (
-            CUSTO_ENERGETICO_VIAGEM
+            rota.custo_energia_base
             * perfil.mult_energia
             * motor.catalogo_de_modos.fator_de_desgaste(unidade.desgaste)
         )
         motor.energia.debitar(CENTRAL, custo)
         # O desgaste segue o ritmo de operação, não a energia gasta: quem opera
         # em ciclos mais curtos castiga mais a máquina por unidade de tempo.
-        unidade.desgaste += motor.catalogo_de_modos.taxa_de_desgaste / perfil.mult_duracao
+        unidade.desgaste += (
+            motor.catalogo_de_modos.taxa_de_desgaste
+            / perfil.mult_duracao
+            * rota.multiplicador_desgaste
+        )
         unidade.viagens_disponiveis -= 1
         unidade.estado = EstadoDoRobo.EXECUTANDO
         local_de_origem = carga.local
-        carga.mover_para(LocalDaCarga.EM_TRANSITO, perfil.mult_degradacao)
+        carga.mover_para(
+            LocalDaCarga.EM_TRANSITO,
+            perfil.mult_degradacao * rota.multiplicador_degradacao,
+        )
         duracao = max(1, round(rota.tempo_base * perfil.mult_duracao))
         ciclo_chegada = motor.ciclo_atual + duracao
 

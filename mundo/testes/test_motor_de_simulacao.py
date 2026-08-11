@@ -18,7 +18,48 @@ def test_motor_gera_mundo_inicial_com_entidades():
     assert "mineradora-1" in motor.robos
     assert "transportadora-1" in motor.robos
     assert len(motor.armazens) == 2
-    assert len(motor.rotas) == 2
+    assert len(motor.rotas) >= 20
+
+
+def test_motor_gera_malha_hibrida_com_rotas_fixas_e_variantes():
+    motor = _criar_motor()
+
+    assert any(rota.fixa for rota in motor.rotas.values())
+    assert any(not rota.fixa for rota in motor.rotas.values())
+
+
+def test_malha_de_rotas_e_deterministica_para_a_mesma_seed():
+    primeiro = _criar_motor(semente=17)
+    segundo = _criar_motor(semente=17)
+
+    assinatura_primeiro = [
+        (rota.identificador, rota.perfil, rota.tempo_base, rota.custo_energia_base)
+        for rota in primeiro.rotas.values()
+    ]
+    assinatura_segundo = [
+        (rota.identificador, rota.perfil, rota.tempo_base, rota.custo_energia_base)
+        for rota in segundo.rotas.values()
+    ]
+
+    assert assinatura_primeiro == assinatura_segundo
+
+
+def test_malha_de_rotas_varia_entre_seeds_nas_rotas_variantes():
+    primeiro = _criar_motor(semente=17)
+    segundo = _criar_motor(semente=18)
+
+    variantes_primeiro = {
+        rota.identificador: (rota.perfil, rota.tempo_base, rota.custo_energia_base)
+        for rota in primeiro.rotas.values()
+        if not rota.fixa
+    }
+    variantes_segundo = {
+        rota.identificador: (rota.perfil, rota.tempo_base, rota.custo_energia_base)
+        for rota in segundo.rotas.values()
+        if not rota.fixa
+    }
+
+    assert variantes_primeiro != variantes_segundo
 
 
 def test_motor_gera_jazidas_com_composicao_real_nao_trivial():

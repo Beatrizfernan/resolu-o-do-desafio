@@ -89,6 +89,8 @@ async def receber_carga(requisicao: RequisicaoDeRecebimento) -> dict:
         total = 0.0
         for identificador in requisicao.identificadores_das_cargas:
             carga = motor.cargas[identificador]
+            if carga.local == LocalDaCarga.EM_JAZIDA:
+                raise ValueError("Carga ainda está na jazida; transporte real é obrigatório antes da armazenagem")
             if not armazem.compativel_com(carga.mineral):
                 motor.eventos.publicar(
                     "carga_contaminada",

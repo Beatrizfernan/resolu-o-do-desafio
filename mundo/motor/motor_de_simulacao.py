@@ -15,7 +15,7 @@ from mundo.dominio.operacao import CatalogoDeOperacao
 from mundo.dominio.modos import CatalogoDeModos
 from mundo.dominio.pesquisa import CatalogoDePesquisa
 from mundo.dominio.robos import EstadoDoRobo, Robo, UnidadeMineradora, UnidadeTransportadora
-from mundo.dominio.rotas import Rota
+from mundo.dominio.rotas import Rota, catalogo_de_perfis_variantes
 from mundo.eventos.barramento import BarramentoDeEventos
 
 from .comandos import Comando, FilaDeComandos
@@ -270,22 +270,47 @@ class MotorDeSimulacao:
                 condicoes="normal",
             )
 
-        self.rotas["rota-1"] = Rota(
-            identificador="rota-1",
-            origem="setor-1",
-            destino="central-distribuicao",
-            distancia=10.0,
-            tempo_base=5,
-            risco=0.05,
-        )
-        self.rotas["rota-2"] = Rota(
-            identificador="rota-2",
-            origem="setor-2",
-            destino="central-distribuicao",
-            distancia=15.0,
-            tempo_base=7,
-            risco=0.08,
-        )
+        bases = [
+            (1, 10.0, 5, 0.05),
+            (2, 12.0, 6, 0.06),
+            (3, 13.0, 6, 0.06),
+            (4, 14.0, 7, 0.07),
+            (5, 15.0, 7, 0.08),
+            (6, 16.0, 8, 0.08),
+            (7, 17.0, 8, 0.09),
+            (8, 18.0, 9, 0.10),
+            (9, 19.0, 9, 0.11),
+            (10, 20.0, 10, 0.12),
+        ]
+        for setor, distancia, tempo_base, risco in bases:
+            self.rotas[f"rota-{setor}"] = Rota(
+                identificador=f"rota-{setor}",
+                origem=f"setor-{setor}",
+                destino="central-distribuicao",
+                distancia=distancia,
+                tempo_base=tempo_base,
+                risco=risco,
+            )
+
+        perfis = catalogo_de_perfis_variantes()
+        self.rng.shuffle(perfis)
+        for (setor, distancia, tempo_base, _), perfil in zip(bases, perfis):
+            self.rotas[f"rota-alt-{setor}"] = Rota(
+                identificador=f"rota-alt-{setor}",
+                origem=f"setor-{setor}",
+                destino="central-distribuicao",
+                distancia=max(1.0, distancia + perfil.ajuste_de_distancia),
+                tempo_base=max(1, tempo_base + perfil.ajuste_de_tempo),
+                risco=perfil.risco,
+                custo_energia_base=perfil.custo_energia_base,
+                multiplicador_degradacao=perfil.multiplicador_degradacao,
+                multiplicador_desgaste=perfil.multiplicador_desgaste,
+                capacidade_maxima=perfil.capacidade_maxima,
+                fixa=False,
+                perfil=perfil.nome,
+                vantagem=perfil.vantagem,
+                desvantagem=perfil.desvantagem,
+            )
 
     def _gerar_composicao_da_jazida(
         self,
