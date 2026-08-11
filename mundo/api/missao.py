@@ -18,6 +18,7 @@ router = APIRouter(prefix="/missao", tags=["missao"])
 CAMINHO_CATALOGO = Path(__file__).parent.parent / "config" / "minerais.json"
 CENTRAL = "missao"
 CUSTOS_DE_AUTORIZACAO_POR_CLASSE = {"rapida": 0.2, "segura": 0.5, "lote": 0.8}
+COLCHAO_MINIMO_MISSAO = 5.0
 
 
 class RequisicaoDeResetarMundo(BaseModel):
@@ -58,6 +59,7 @@ async def consultar_eventos(desde_ciclo: int = 0) -> list[dict]:
 class RequisicaoDeAlocacao(BaseModel):
     destino: str
     quantidade: int
+    politica: str = "pulso"
 
 
 @router.post("/alocar-energia")
@@ -67,8 +69,14 @@ async def alocar_energia(requisicao: RequisicaoDeAlocacao) -> dict:
     def executar() -> None:
         if not motor.energia.esta_operante(CENTRAL):
             raise ValueError("Central de missão dormente: não há quem aloque")
+        quantidade = requisicao.quantidade
+        if requisicao.politica == "contingencia":
+            saldo_da_missao = motor.energia.consultar_energia(CENTRAL)
+            quantidade = min(requisicao.quantidade, max(0.0, saldo_da_missao - COLCHAO_MINIMO_MISSAO))
+            if quantidade <= 0:
+                raise ValueError("Política de contingência preservou o colchão da missão")
         motor.energia.alocar_energia(
-            GerenciadorDeEnergia.RESERVA, requisicao.destino, requisicao.quantidade,
+            GerenciadorDeEnergia.RESERVA, requisicao.destino, quantidade,
         )
 
     motor.enfileirar_comando(Comando("alocar_energia", CENTRAL, requisicao.model_dump(), executar))

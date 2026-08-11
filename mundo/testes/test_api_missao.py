@@ -160,3 +160,25 @@ def test_missao_dormente_nao_aloca():
         # acontecendo, porque o consumo já derruba o total abaixo disso.
         consumo = motor.catalogo_de_operacao.consumo_por_ciclo_da_central
         assert motor.energia.consultar_energia("extracao") == pytest.approx(antes - consumo)
+
+
+def test_alocar_energia_com_politica_de_contingencia_mantem_colchao_na_missao():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        antes_na_extracao = motor.energia.consultar_energia("extracao")
+
+        resposta = cliente.post(
+            "/missao/alocar-energia",
+            json={
+                "destino": "extracao",
+                "quantidade": 50,
+                "politica": "contingencia",
+            },
+        )
+
+        assert resposta.status_code == 200
+        motor.avancar_ciclo(1)
+
+        consumo = motor.catalogo_de_operacao.consumo_por_ciclo_da_central
+        assert motor.energia.consultar_energia("extracao") == pytest.approx(antes_na_extracao + 5.0 - consumo)
