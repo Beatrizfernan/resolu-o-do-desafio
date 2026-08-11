@@ -155,7 +155,8 @@ async def aprovar_carga(requisicao: RequisicaoDeAnalise) -> dict:
         limiar = motor.catalogo_de_pesquisa.limiar_qualidade_aprovacao
         if carga.qualidade < limiar:
             raise ValueError("Qualidade insuficiente para aprovação")
-            
+
+        carga.aprovada = True
         motor.eventos.publicar("carga_aprovada", motor.ciclo_atual, {"carga": carga.identificador})
 
     motor.enfileirar_comando(Comando("aprovar_carga", CENTRAL, requisicao.model_dump(), executar))
@@ -172,7 +173,8 @@ async def rejeitar_carga(requisicao: RequisicaoDeAnalise) -> dict:
             raise ValueError("Carga não encontrada")
         if not carga.analisada:
             raise ValueError("Carga não analisada")
-            
+
+        carga.aprovada = False
         motor.eventos.publicar(
             "carga_rejeitada", motor.ciclo_atual, {"carga": requisicao.identificador_da_carga},
         )
@@ -197,10 +199,12 @@ async def preparar_distribuicao(requisicao: RequisicaoDeDistribuicao) -> dict:
             raise ValueError("Carga não encontrada")
         if not carga.analisada:
             raise ValueError("Carga não analisada")
-            
+        if not carga.aprovada:
+            raise ValueError("Carga não aprovada")
+
         if carga.local in (LocalDaCarga.EM_ARMAZEM, LocalDaCarga.EM_TRANSITO):
             raise ValueError("Só se distribui carga que não está guardada nem viajando")
-            
+
         mineral = motor.catalogo_de_minerais.obter(carga.mineral)
         valor_entregue = carga.valor_efetivo(mineral.valor_por_unidade)
         motor.faturamento_total += valor_entregue

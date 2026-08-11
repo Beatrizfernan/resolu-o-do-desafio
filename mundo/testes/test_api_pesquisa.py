@@ -188,6 +188,7 @@ def test_aprovar_carga_analisada():
         motor.avancar_ciclo(1)
 
         assert "carga_aprovada" in _tipos_de_eventos(motor)
+        assert motor.cargas["carga-1"].aprovada is True
 
 
 def test_rejeitar_carga_nao_analisada_gera_erro():
@@ -217,7 +218,7 @@ def test_preparar_distribuicao_nao_analisada_gera_erro():
         assert motor.faturamento_total == 0.0
 
 
-def test_preparar_distribuicao_analisada_soma_faturamento():
+def test_preparar_distribuicao_analisada_sem_aprovacao_gera_erro():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
         motor = instancia_do_mundo.obter_motor()
@@ -226,4 +227,20 @@ def test_preparar_distribuicao_analisada_soma_faturamento():
         _preparar_distribuicao(cliente, _autorizar(cliente))
         motor.avancar_ciclo(1)
 
-        assert motor.faturamento_total == 50.0
+        eventos = motor.eventos.consultar_eventos()
+        assert any(e.tipo == "operacao_invalida" and "não aprovada" in e.dados["motivo"] for e in eventos)
+        assert motor.faturamento_total == 0.0
+
+
+def test_preparar_distribuicao_aprovada_soma_faturamento():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 100.0, local=LocalDaCarga.NA_MAO, analisada=True)
+
+        cliente.post("/pesquisa/aprovar-carga", json={"identificador_da_carga": "carga-1"})
+        motor.avancar_ciclo(1)
+        _preparar_distribuicao(cliente, _autorizar(cliente))
+        motor.avancar_ciclo(1)
+
+        assert motor.faturamento_total == pytest.approx(49.8)

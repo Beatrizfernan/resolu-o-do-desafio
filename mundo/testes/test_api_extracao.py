@@ -15,6 +15,18 @@ def test_consultar_jazidas_retorna_dez_jazidas():
         assert len(resposta.json()) == 10
 
 
+def test_consultar_mineradoras_lista_apenas_unidades_mineradoras():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        mineradoras = cliente.get("/extracao/mineradoras")
+
+        assert mineradoras.status_code == 200
+        corpos = mineradoras.json()
+        assert {item["identificador"] for item in corpos} == {"mineradora-1", "mineradora-2"}
+        assert all("desgaste" in item for item in corpos)
+        assert all("localizacao" in item for item in corpos)
+
+
 def test_iniciar_extracao_e_aceita_e_processada_no_proximo_ciclo():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:

@@ -210,6 +210,50 @@ def test_iniciar_viagem_em_rota_interditada_gera_operacao_invalida():
         assert motor.robos["transportadora-1"].estado.value == "disponivel"
 
 
+def test_iniciar_viagem_rejeita_rota_incompativel_com_a_jazida_de_origem():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 100)
+        jazida = next(j for j in motor.jazidas.values() if j.localizacao == "setor-2")
+
+        cliente.post("/extracao/iniciar-extracao", json={
+            "identificador_da_unidade": "mineradora-1",
+            "identificador_da_jazida": jazida.identificador,
+            "quantidade": 10.0,
+        })
+        motor.avancar_ciclo(6)
+
+        carga = next(iter(motor.cargas.values()))
+        _iniciar_viagem(cliente, _autorizar(cliente), identificador_da_rota="rota-1", identificador_da_carga=carga.identificador)
+        motor.avancar_ciclo(1)
+
+        eventos = motor.eventos.consultar_eventos()
+        assert any(e.tipo == "operacao_invalida" and "origem" in e.dados["motivo"] for e in eventos)
+        assert motor.robos["transportadora-1"].estado == EstadoDoRobo.DISPONIVEL
+
+
+def test_iniciar_viagem_aceita_rota_compativel_com_a_jazida_de_origem():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 100)
+        jazida = next(j for j in motor.jazidas.values() if j.localizacao == "setor-2")
+
+        cliente.post("/extracao/iniciar-extracao", json={
+            "identificador_da_unidade": "mineradora-1",
+            "identificador_da_jazida": jazida.identificador,
+            "quantidade": 10.0,
+        })
+        motor.avancar_ciclo(6)
+
+        carga = next(iter(motor.cargas.values()))
+        _iniciar_viagem(cliente, _autorizar(cliente), identificador_da_rota="rota-2", identificador_da_carga=carga.identificador)
+        motor.avancar_ciclo(1)
+
+        assert motor.robos["transportadora-1"].estado == EstadoDoRobo.EXECUTANDO
+
+
 def test_iniciar_viagem_sem_viagens_disponiveis_gera_operacao_invalida():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:

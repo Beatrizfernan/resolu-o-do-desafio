@@ -133,6 +133,12 @@ async def iniciar_viagem(requisicao: RequisicaoDeViagem) -> dict:
         # deixaria de distinguir uma da outra.
         if carga.local in (LocalDaCarga.EM_ARMAZEM, LocalDaCarga.EM_TRANSITO):
             raise ValueError("Só se transporta carga que não está guardada nem viajando")
+        if carga.local == LocalDaCarga.EM_JAZIDA and carga.origem_jazida is not None:
+            jazida_de_origem = motor.jazidas.get(carga.origem_jazida)
+            if jazida_de_origem is None:
+                raise ValueError("Jazida de origem da carga não encontrada")
+            if rota.origem != jazida_de_origem.localizacao:
+                raise ValueError("Rota incompatível com a origem da carga")
         perfil = motor.catalogo_de_modos.obter_transporte(requisicao.modo)
         custo = (
             CUSTO_ENERGETICO_VIAGEM

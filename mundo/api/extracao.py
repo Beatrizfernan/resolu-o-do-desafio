@@ -47,6 +47,22 @@ async def inspecionar_jazida(identificador: str) -> dict:
     }
 
 
+@router.get("/mineradoras")
+async def consultar_mineradoras() -> list[dict]:
+    motor = obter_motor()
+    return [
+        {
+            "identificador": robo.identificador,
+            "estado": robo.estado.value,
+            "localizacao": robo.localizacao,
+            "desgaste": robo.desgaste,
+            "capacidade": robo.capacidade,
+        }
+        for robo in motor.robos.values()
+        if robo.identificador.startswith("mineradora-")
+    ]
+
+
 class RequisicaoDeExtracao(BaseModel):
     identificador_da_unidade: str
     identificador_da_jazida: str
@@ -119,6 +135,7 @@ async def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
                 requisicao.quantidade,
                 perfil.qualidade_inicial,
                 local=LocalDaCarga.EM_JAZIDA,
+                origem_jazida=jazida.identificador,
             )
             motor.cargas[carga.identificador] = carga
             motor.eventos.publicar(

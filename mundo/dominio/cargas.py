@@ -27,6 +27,8 @@ class CargaMineral:
     local: LocalDaCarga = LocalDaCarga.EM_JAZIDA
     mult_degradacao_local: float = 1.0
     analisada: bool = False
+    aprovada: bool = False
+    origem_jazida: str | None = None
 
     def __post_init__(self) -> None:
         self.qualidade = clamp_qualidade(self.qualidade)
