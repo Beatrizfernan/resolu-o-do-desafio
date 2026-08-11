@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -27,6 +29,7 @@ async def consultar_fila() -> list[str]:
 
 class RequisicaoDeAnalise(BaseModel):
     identificador_da_carga: str
+    tipo_de_analise: Literal["rapida", "completa", "forense"] = "completa"
 
 
 class RequisicaoDeSondagem(BaseModel):
@@ -49,13 +52,21 @@ async def iniciar_analise(requisicao: RequisicaoDeAnalise) -> dict:
             raise ValueError("Centro de pesquisa ocupado")
             
         mineral = motor.catalogo_de_minerais.obter(carga.mineral)
-        
+
+        ajuste_por_tipo = {
+            "rapida": {"duracao": 0.5, "custo": 0.8},
+            "completa": {"duracao": 1.0, "custo": 1.0},
+            "forense": {"duracao": 1.5, "custo": 1.4},
+        }
+        ajuste = ajuste_por_tipo[requisicao.tipo_de_analise]
+
         custo = catalogo.custo_base_de_analise * mineral.custo_extracao
+        custo *= ajuste["custo"]
         motor.energia.debitar(CENTRAL, custo)
-        
+
         motor.analises_em_andamento.append(requisicao.identificador_da_carga)
-        
-        duracao = mineral.ciclos_de_analise
+
+        duracao = max(1, round(mineral.ciclos_de_analise * ajuste["duracao"]))
         ciclo_conclusao = motor.ciclo_atual + duracao
 
         def concluir() -> None:

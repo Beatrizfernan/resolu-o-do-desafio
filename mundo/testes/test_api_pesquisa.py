@@ -85,6 +85,22 @@ def test_analise_conclui_no_tempo_do_mineral():
         assert motor.analises_em_andamento == []
 
 
+def test_analise_rapida_termina_antes_da_completa():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.cargas["carga-1"] = CargaMineral("carga-1", "hematita", 10.0, 90.0, local=LocalDaCarga.NA_MAO)
+        motor.energia.alocar_energia("reserva_estrategica", "pesquisa", 20)
+
+        cliente.post("/pesquisa/iniciar-analise", json={
+            "identificador_da_carga": "carga-1",
+            "tipo_de_analise": "rapida",
+        })
+        motor.avancar_ciclo(2)
+
+        assert any(e.tipo == "analise_concluida" for e in motor.eventos.consultar_eventos())
+
+
 def test_classificar_carga_oculta_qualidade_se_nao_analisada():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
