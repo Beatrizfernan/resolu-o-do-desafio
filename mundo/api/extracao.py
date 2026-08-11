@@ -57,6 +57,7 @@ async def consultar_mineradoras() -> list[dict]:
             "localizacao": robo.localizacao,
             "desgaste": robo.desgaste,
             "capacidade": robo.capacidade,
+            "tipo": robo.tipo,
         }
         for robo in motor.robos.values()
         if robo.identificador.startswith("mineradora-")

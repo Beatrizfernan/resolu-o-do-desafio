@@ -24,7 +24,7 @@ class Robo:
 
 @dataclass
 class UnidadeMineradora(Robo):
-    pass
+    tipo: str = "leve"
 
 
 @dataclass

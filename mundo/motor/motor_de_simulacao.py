@@ -233,15 +233,24 @@ class MotorDeSimulacao:
                 )
                 contador_jazidas += 1
 
-        for i in range(1, 3):
-            self.robos[f"mineradora-{i}"] = UnidadeMineradora(
-                identificador=f"mineradora-{i}",
-                estado=EstadoDoRobo.DISPONIVEL,
-                energia_necessaria=2,
-                desgaste=0.0,
-                localizacao="base",
-                capacidade=50.0,
-            )
+        self.robos["mineradora-1"] = UnidadeMineradora(
+            identificador="mineradora-1",
+            estado=EstadoDoRobo.DISPONIVEL,
+            energia_necessaria=2,
+            desgaste=0.0,
+            localizacao="base",
+            capacidade=35.0,
+            tipo="leve",
+        )
+        self.robos["mineradora-2"] = UnidadeMineradora(
+            identificador="mineradora-2",
+            estado=EstadoDoRobo.DISPONIVEL,
+            energia_necessaria=2,
+            desgaste=0.0,
+            localizacao="base",
+            capacidade=25.0,
+            tipo="precisa",
+        )
         for i in range(1, 3):
             self.robos[f"transportadora-{i}"] = UnidadeTransportadora(
                 identificador=f"transportadora-{i}",

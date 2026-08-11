@@ -27,6 +27,13 @@ def test_consultar_mineradoras_lista_apenas_unidades_mineradoras():
         assert all("localizacao" in item for item in corpos)
 
 
+def test_consultar_mineradoras_expoe_tipos_distintos():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        tipos = {item["tipo"] for item in cliente.get("/extracao/mineradoras").json()}
+        assert tipos == {"leve", "precisa"}
+
+
 def test_iniciar_extracao_e_aceita_e_processada_no_proximo_ciclo():
     app = criar_app(com_loop_real_time=False)
     with TestClient(app) as cliente:
