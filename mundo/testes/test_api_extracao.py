@@ -204,7 +204,7 @@ def test_modo_agressivo_conclui_antes_do_cuidadoso():
         assert motor.robos["mineradora-2"].estado.value == "executando"
 
 
-def _custo_de_uma_extracao(modo):
+def _custo_de_uma_extracao(modo, **campos):
     from mundo.api.dependencias import instancia_do_mundo
 
     app = criar_app(com_loop_real_time=False)
@@ -214,7 +214,7 @@ def _custo_de_uma_extracao(modo):
         mineral = motor.catalogo_de_minerais.obter(motor.jazidas["jazida-1"].mineral)
         antes = motor.energia.consultar_energia("extracao")
 
-        _extrair(cliente, modo=modo)
+        _extrair(cliente, modo=modo, **campos)
         motor.avancar_ciclo(1)
 
         # Descontado o consumo do ciclo: o que interessa aqui é o preço da
@@ -226,26 +226,51 @@ def _custo_de_uma_extracao(modo):
 def test_custo_energetico_deriva_do_mineral_e_do_modo():
     custo_extracao, cobrado = _custo_de_uma_extracao("normal")
 
-    esperado = custo_extracao * 10.0 * 0.2 * 1.0
+    esperado = custo_extracao * 10.0 * 0.2 * 1.0 * 0.9
     assert cobrado == pytest.approx(esperado)
 
 
 def test_custo_energetico_escala_com_o_mult_energia_do_modo():
     # Agressivo gasta menos energia por unidade (mult_energia 0.45) que o normal (1.0):
     # é essa diferença que ancora o termo `perfil.mult_energia` na fórmula do custo.
-    # custo = custo_extracao × quantidade(10) × fator_base_de_energia(0.2) × mult_energia(0.7).
+    # O perfil superficial é o padrão e aplica multiplicador adicional de 0.9.
     custo_extracao, cobrado_agressivo = _custo_de_uma_extracao("agressivo")
     _, cobrado_normal = _custo_de_uma_extracao("normal")
 
-    assert cobrado_agressivo == pytest.approx(custo_extracao * 10.0 * 0.2 * 0.45)
+    assert cobrado_agressivo == pytest.approx(custo_extracao * 10.0 * 0.2 * 0.45 * 0.9)
     assert cobrado_agressivo == pytest.approx(cobrado_normal * 0.45)
 
 
 def test_custo_energetico_do_modo_cuidadoso_e_o_mais_caro():
     custo_extracao, cobrado = _custo_de_uma_extracao("cuidadoso")
 
-    # custo = custo_extracao × quantidade(10) × fator_base_de_energia(0.2) × mult_energia(1.8).
-    assert cobrado == pytest.approx(custo_extracao * 10.0 * 0.2 * 1.8)
+    # custo = custo_extracao × quantidade(10) × fator_base_de_energia(0.2) × mult_energia(1.8) × superficial(0.9).
+    assert cobrado == pytest.approx(custo_extracao * 10.0 * 0.2 * 1.8 * 0.9)
+
+
+def test_perfil_profundo_custa_mais_energia_que_superficial():
+    _, cobrado_superficial = _custo_de_uma_extracao(
+        "normal", perfil_de_escavacao="superficial"
+    )
+    _, cobrado_profundo = _custo_de_uma_extracao(
+        "normal", perfil_de_escavacao="profunda"
+    )
+
+    assert cobrado_profundo == pytest.approx(cobrado_superficial * 1.25 / 0.9)
+    assert cobrado_profundo > cobrado_superficial
+
+
+def test_perfil_mapeadora_melhora_qualidade_inicial_da_carga():
+    app = criar_app(com_loop_real_time=False)
+    with TestClient(app) as cliente:
+        motor = instancia_do_mundo.obter_motor()
+        motor.energia.alocar_energia("reserva_estrategica", "extracao", 100)
+
+        _extrair(cliente, perfil_de_escavacao="mapeadora")
+        motor.avancar_ciclo(6)
+        carga = next(iter(motor.cargas.values()))
+
+        assert carga.qualidade == pytest.approx(93.6)
 
 
 def _custo_com_jazida_em(fracao_restante):

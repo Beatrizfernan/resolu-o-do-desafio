@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -14,6 +16,11 @@ from .dependencias import obter_motor
 router = APIRouter(prefix="/extracao", tags=["extracao"])
 CENTRAL = "extracao"
 DURACAO_EXTRACAO_EM_CICLOS = 5
+AJUSTE_POR_PERFIL_DE_ESCAVACAO = {
+    "superficial": {"energia": 0.9, "qualidade": 0.0},
+    "profunda": {"energia": 1.25, "qualidade": 4.0},
+    "mapeadora": {"energia": 1.1, "qualidade": 2.0},
+}
 
 
 @router.get("/jazidas")
@@ -69,6 +76,7 @@ class RequisicaoDeExtracao(BaseModel):
     identificador_da_jazida: str
     quantidade: float
     modo: ModoDeExtracao = ModoDeExtracao.NORMAL
+    perfil_de_escavacao: Literal["superficial", "profunda", "mapeadora"] = "superficial"
 
 
 @router.post("/iniciar-extracao")
@@ -89,6 +97,7 @@ async def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
         if jazida.estado != EstadoDaJazida.DISPONIVEL:
             raise ValueError("Jazida não disponível")
         perfil = motor.catalogo_de_modos.obter_extracao(requisicao.modo)
+        ajuste_do_perfil = AJUSTE_POR_PERFIL_DE_ESCAVACAO[requisicao.perfil_de_escavacao]
         # O desperdício do modo é consumido da jazida só na conclusão, mas precisa
         # ser validado aqui: se a jazida não comporta o consumo real, rejeitar antes
         # do débito e da transição de estado, senão a unidade fica em EXECUTANDO
@@ -105,6 +114,7 @@ async def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
             * requisicao.quantidade
             * motor.catalogo_de_modos.fator_base_de_energia
             * perfil.mult_energia
+            * ajuste_do_perfil["energia"]
             * motor.catalogo_de_modos.fator_de_escassez(jazida.fracao_restante)
             * motor.catalogo_de_modos.fator_de_desgaste(unidade.desgaste)
         )
@@ -134,7 +144,7 @@ async def iniciar_extracao(requisicao: RequisicaoDeExtracao) -> dict:
                 f"carga-{jazida.identificador}-{unidade.identificador}-{motor.ciclo_atual}",
                 jazida.mineral,
                 requisicao.quantidade,
-                perfil.qualidade_inicial,
+                min(100.0, perfil.qualidade_inicial + ajuste_do_perfil["qualidade"]),
                 local=LocalDaCarga.EM_JAZIDA,
                 origem_jazida=jazida.identificador,
             )
