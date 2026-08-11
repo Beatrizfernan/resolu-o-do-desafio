@@ -39,4 +39,4 @@ Concluida.
 ## Observacoes
 
 - Os testes executados passaram com 2 warnings preexistentes do ambiente pytest/FastAPI (`asyncio_mode` desconhecido e `starlette.testclient` deprecado com `httpx`).
-- Hash do commit: pendente no momento da escrita inicial do relatorio.
+- Commit principal da task: `0b2734b` (`feat: adiciona classes de autorizacao na missao`).
