@@ -32,6 +32,7 @@ class PoliticaDeAprovacao(str, Enum):
 class TipoDeEvento(str, Enum):
     TRANSPORTE_CONCLUIDO = "transporte_concluido"
     CARGAS_DESEMPILHADAS = "cargas_desempilhadas"
+    CARGAS_ARMAZENADAS = "cargas_armazenadas"
 
 
 class ClienteDoMundo(Protocol):
@@ -157,7 +158,7 @@ class CentralDePesquisa:
                 if tipo == TipoDeEvento.TRANSPORTE_CONCLUIDO.value:
                     if dados.get("carga"):
                         ids_disponiveis.add(dados["carga"])
-                elif tipo == TipoDeEvento.CARGAS_DESEMPILHADAS.value:
+                elif tipo in {TipoDeEvento.CARGAS_DESEMPILHADAS.value, TipoDeEvento.CARGAS_ARMAZENADAS.value}:
                     ids_disponiveis.update(dados.get("cargas", []))
 
             if ids_disponiveis:
@@ -191,6 +192,12 @@ class CentralDePesquisa:
         )
         self.analises_solicitadas.add(carga.identificador)
         return carga.identificador
+
+    def _esta_guardada(self, cliente: ClienteDoMundo, identificador: str) -> bool:
+        return any(
+            identificador in armazem.get("pilha", [])
+            for armazem in cliente.chamar("GET", "/armazenagem/armazens")
+        )
 
     def encaminhar_para_armazenagem(
         self,
@@ -240,7 +247,8 @@ class CentralDePesquisa:
             if tipo == "analise_concluida" and carga:
                 self.processar_carga_analisada(cliente, carga)
             elif tipo == "carga_aprovada" and carga:
-                self.preparar_distribuicao(cliente, carga)
+                if not self._esta_guardada(cliente, carga):
+                    self.preparar_distribuicao(cliente, carga)
         self.processar_ciclo(cliente, novos_eventos)
 
     def _escolher_politica(

@@ -1,5 +1,6 @@
 """Orquestração das Centrais durante a avaliação."""
 
+from centrais.armazenagem import CentralDeArmazenagem
 from centrais.extracao import CentralDeExtracao
 from centrais.missao import CentralDeMissao
 from centrais.pesquisa.central import CentralDePesquisa
@@ -9,8 +10,10 @@ def executar_avaliacao(cliente, limite_de_ciclos: int) -> None:
     fase = "alocar_energia"
     carga_atual = None
     ultimo_ciclo_lido = 0
+    cargas_conhecidas: dict[str, dict] = {}
     central_de_missao = CentralDeMissao(cliente)
     central_de_extracao = CentralDeExtracao(cliente)
+    central_de_armazenagem = CentralDeArmazenagem(cliente, central_de_missao)
     central_de_pesquisa = CentralDePesquisa()
 
     for _ in range(limite_de_ciclos):
@@ -18,7 +21,11 @@ def executar_avaliacao(cliente, limite_de_ciclos: int) -> None:
             return
 
         eventos = central_de_missao.consultar_eventos(desde_ciclo=ultimo_ciclo_lido)
-        central_de_pesquisa.processar_eventos(cliente, eventos)
+        eventos_da_pesquisa = [
+            evento for evento in eventos
+            if evento["tipo"] != "transporte_concluido"
+        ]
+        central_de_pesquisa.processar_eventos(cliente, eventos_da_pesquisa)
 
         for evento in eventos:
             ultimo_ciclo_lido = max(ultimo_ciclo_lido, evento["ciclo"] + 1)
@@ -31,10 +38,14 @@ def executar_avaliacao(cliente, limite_de_ciclos: int) -> None:
                     "identificador_da_unidade": dados["unidade"],
                 })
             elif tipo == "transporte_concluido":
-                fase = "aguardando"
+                fase = "guardar"
                 cliente.chamar("POST", "/transporte/retornar-unidade", {
                     "identificador_da_unidade": dados["unidade"],
                 })
+            elif tipo == "carga_aprovada":
+                fase = "desenterrar"
+            elif tipo == "cargas_desempilhadas":
+                fase = "vender"
             elif tipo == "carga_entregue":
                 carga_atual = None
                 fase = "extrair"
@@ -71,6 +82,17 @@ def executar_avaliacao(cliente, limite_de_ciclos: int) -> None:
                     "modo": "normal",
                 })
                 fase = "aguardando"
+        elif fase == "guardar":
+            for registro in cliente.chamar("GET", "/transporte/cargas-disponiveis"):
+                cargas_conhecidas[registro["identificador"]] = registro
+            if central_de_armazenagem.guardar([carga_atual], cargas_conhecidas):
+                fase = "aguardando"
+        elif fase == "desenterrar":
+            central_de_armazenagem.retirar(carga_atual)
+            fase = "aguardando"
+        elif fase == "vender":
+            central_de_pesquisa.preparar_distribuicao(cliente, carga_atual)
+            fase = "aguardando"
 
         cliente.avancar_ciclo()
 
