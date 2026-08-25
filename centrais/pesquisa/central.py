@@ -112,6 +112,7 @@ class CentralDePesquisa:
         self.distribuicoes_solicitadas: set[str] = set()
         self.rejeicoes_solicitadas: set[str] = set()
         self.armazenagens_solicitadas: set[str] = set()
+        self.desempilhamentos_solicitados: set[str] = set()
         self.eventos_processados: set[str] = set()
 
     def observar_cargas(self, cargas: list[dict[str, Any]]) -> None:
@@ -169,13 +170,20 @@ class CentralDePesquisa:
                 ])
 
         em_andamento = cliente.chamar("GET", "/pesquisa/em-andamento")
-        if not len(self.fila):
-            return None
 
         if em_andamento:
             carga = self.fila.retirar()
-            if carga is not None:
-                self.encaminhar_para_armazenagem(cliente, carga.identificador)
+            if carga is not None and not self.encaminhar_para_armazenagem(cliente, carga.identificador):
+                self.fila.adicionar(
+                    carga,
+                    self.PRIORIDADE_POR_MINERAL.get(carga.mineral, self.PRIORIDADE_DESCONHECIDA),
+                )
+            return None
+
+        if self._solicitar_desempilhamento_prioritario(cliente):
+            return None
+
+        if not len(self.fila):
             return None
 
         carga = self.fila.retirar()
@@ -226,6 +234,45 @@ class CentralDePesquisa:
             {"identificador_do_armazem": armazem["identificador"], "identificadores_das_cargas": [identificador], "id_autorizacao": autorizacao["id_autorizacao"]},
         )
         self.armazenagens_solicitadas.add(identificador)
+        return True
+
+    def _solicitar_desempilhamento_prioritario(self, cliente: ClienteDoMundo) -> bool:
+        """Traz a carga armazenada mais prioritária de volta à Pesquisa."""
+        armazens = cliente.chamar("GET", "/armazenagem/armazens")
+        candidatos = [
+            carga for carga in self.cargas.values()
+            if carga.identificador not in self.analises_solicitadas
+            and carga.identificador not in self.desempilhamentos_solicitados
+            and any(carga.identificador in armazem.get("pilha", []) for armazem in armazens)
+        ]
+        if not candidatos:
+            return False
+
+        carga = min(
+            candidatos,
+            key=lambda item: self.PRIORIDADE_POR_MINERAL.get(item.mineral, self.PRIORIDADE_DESCONHECIDA),
+        )
+        armazem = next(
+            armazem for armazem in armazens
+            if carga.identificador in armazem.get("pilha", [])
+        )
+        autorizacao = cliente.chamar(
+            "POST", "/missao/autorizar-missao",
+            {
+                "operacao": "retirar_carga",
+                "central_solicitante": "armazenagem",
+                "classe": ClasseDeAutorizacao.RAPIDA.value,
+            },
+        )
+        cliente.chamar(
+            "POST", "/armazenagem/retirar-carga",
+            {
+                "identificador_do_armazem": armazem["identificador"],
+                "identificador_da_carga": carga.identificador,
+                "id_autorizacao": autorizacao["id_autorizacao"],
+            },
+        )
+        self.desempilhamentos_solicitados.add(carga.identificador)
         return True
 
     def processar_eventos(
