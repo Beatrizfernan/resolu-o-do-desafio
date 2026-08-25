@@ -36,8 +36,14 @@ class CentralDeMissao:
         return self.cliente.consultar_eventos(desde_ciclo)
 
     def distribuir_orcamento_inicial(self) -> None:
+        # ATENCAO (beatriz): estava `contingencia` e travava tudo no ciclo 2.
+        # A contingencia limita pelo saldo da PROPRIA missao, nao pela reserva:
+        #   quantidade = min(pedido, max(0, saldo_da_missao - 5.0))
+        # Como a missao comeca com 10, cada central recebia 5 em vez de 250, e
+        # a primeira extracao morria com EnergiaInsuficienteError. Na
+        # distribuicao inicial a politica tem que ser `pulso`.
         for destino, quantidade in self.orcamento.items():
-            self.alocar_energia(destino, quantidade, politica="contingencia")
+            self.alocar_energia(destino, quantidade, politica="pulso")
 
     def alocar_energia(
         self,

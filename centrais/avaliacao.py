@@ -1,5 +1,6 @@
 """Orquestração da avaliação usando a política da Central de Extração."""
 
+from centrais.armazenagem import CentralDeArmazenagem
 from centrais.extracao import CentralDeExtracao
 from centrais.missao import CentralDeMissao
 
@@ -8,8 +9,10 @@ def executar_avaliacao(cliente, limite_de_ciclos: int) -> None:
     fase = "alocar_energia"
     carga_atual = None
     ultimo_ciclo_lido = 0
+    cargas_conhecidas: dict[str, dict] = {}
     central_de_missao = CentralDeMissao(cliente)
     central_de_extracao = CentralDeExtracao(cliente)
+    central_de_armazenagem = CentralDeArmazenagem(cliente, central_de_missao)
 
     for _ in range(limite_de_ciclos):
         if cliente.simulacao_encerrada():
@@ -30,13 +33,20 @@ def executar_avaliacao(cliente, limite_de_ciclos: int) -> None:
                     "identificador_da_unidade": dados["unidade"],
                 })
             elif tipo == "transporte_concluido":
-                fase = "analisar"
+                fase = "guardar"
                 cliente.chamar("POST", "/transporte/retornar-unidade", {
                     "identificador_da_unidade": dados["unidade"],
                 })
+            elif tipo == "cargas_armazenadas":
+                # Analise e aprovacao nao checam o local da carga: so
+                # `preparar-distribuicao` exige que ela nao esteja guardada.
+                # Entao a carga atravessa a analise inteira dentro do armazem.
+                fase = "analisar"
             elif tipo == "analise_concluida":
                 fase = "aprovar"
             elif tipo == "carga_aprovada":
+                fase = "desenterrar"
+            elif tipo == "cargas_desempilhadas":
                 fase = "vender"
             elif tipo == "carga_entregue":
                 carga_atual = None
@@ -80,6 +90,16 @@ def executar_avaliacao(cliente, limite_de_ciclos: int) -> None:
                     "modo": "normal",
                 })
                 fase = "aguardando"
+
+        elif fase == "guardar":
+            for registro in cliente.chamar("GET", "/transporte/cargas-disponiveis"):
+                cargas_conhecidas[registro["identificador"]] = registro
+            if central_de_armazenagem.guardar([carga_atual], cargas_conhecidas):
+                fase = "aguardando"
+
+        elif fase == "desenterrar":
+            central_de_armazenagem.retirar(carga_atual)
+            fase = "aguardando"
 
         elif fase == "analisar":
             cliente.chamar("POST", "/pesquisa/iniciar-analise", {
