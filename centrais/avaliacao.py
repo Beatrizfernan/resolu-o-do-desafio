@@ -41,8 +41,16 @@ def executar_avaliacao(cliente, limite_de_ciclos: int) -> None:
             if tipo == "extracao_concluida":
                 carga_atual = dados["carga"]
                 fase = "transportar"
+                # Sem isto a mineradora fica AGUARDANDO para sempre e a
+                # segunda extracao nunca acontece.
+                cliente.chamar("POST", "/extracao/retornar-unidade", {
+                    "identificador_da_unidade": dados["unidade"],
+                })
             elif tipo == "transporte_concluido":
                 fase = "analisar"
+                cliente.chamar("POST", "/transporte/retornar-unidade", {
+                    "identificador_da_unidade": dados["unidade"],
+                })
             elif tipo == "analise_concluida":
                 fase = "aprovar"
             elif tipo == "carga_aprovada":
@@ -97,7 +105,9 @@ def executar_avaliacao(cliente, limite_de_ciclos: int) -> None:
                 })
                 cliente.chamar("POST", "/transporte/iniciar-viagem", {
                     "identificador_da_unidade": unidade["identificador"],
-                    "identificador_da_rota": rotas[0]["identificador"],
+                    # ATENCAO: planejar-transporte devolve lista de STRINGS,
+                    # nao de dicts. O README nao diz isso.
+                    "identificador_da_rota": rotas[0],
                     "identificador_da_carga": carga_atual,
                     "id_autorizacao": autorizacao["id_autorizacao"],
                     "modo": "normal",
