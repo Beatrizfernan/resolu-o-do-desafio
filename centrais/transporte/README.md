@@ -426,3 +426,30 @@ requests.post(f"{BASE_URL}/transporte/retornar-unidade", json={
     "identificador_da_unidade": "transportadora-1",
 })
 ```
+
+## Estrategia autonoma implementada em `centrais/`
+
+A estrategia local usa eventos para montar uma fila idempotente de cargas, cruza
+`/transporte/planejar-transporte` com `/transporte/rotas` e escolhe
+carga/unidade/rota/modo por menor score esperado. Cristal, gelo e jarosita
+mantem prioridade sobre cargas comuns; apos tres despachos raros consecutivos,
+uma carga comum antiga pode avançar se nao houver cristal bloqueado e ainda
+houver viagens projetadas.
+
+Regras principais:
+
+- cristal sempre usa modo `rapido` e nunca usa perfis `abrasiva`,
+  `economica`, `expressa_fragil`, `pesada` ou `turbo`;
+- gelo sempre usa `rapido`; jarosita usa `rapido` ou `normal`;
+- hematita usa `economico`; silica usa `normal`;
+- a energia minima antes do despacho inclui custo estimado, reserva operacional
+  de `2.0` e consumo passivo previsto;
+- se falta energia, a central pede apenas o deficit incremental com politica
+  `contingencia` e espera o ciclo seguinte;
+- a autorizacao `rapida` so e solicitada depois de existir plano viavel;
+- ao concluir transporte, a central descarrega, retorna a unidade e produz um
+  handoff para Pesquisa/Armazenagem.
+
+Como o mundo atual nao possui `armazem-3`, a estrategia reserva `armazem-2`
+como alias exclusivo para cristais. Se `armazem-3` aparecer pela API, ele passa
+a ser usado automaticamente. Os demais minerais recomendam `armazem-1`.
