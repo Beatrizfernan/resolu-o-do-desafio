@@ -37,7 +37,12 @@ class CentralDeMissao:
 
     def distribuir_orcamento_inicial(self) -> None:
         for destino, quantidade in self.orcamento.items():
-            self.alocar_energia(destino, quantidade, politica="contingencia")
+            # O orçamento inicial é um compromisso deliberado. A política de
+            # contingência limita cada repasse ao colchão de 5.0 definido pela
+            # API; aplicada aqui, ela deixaria Extração com apenas 15.0 e
+            # impediria a primeira operação valiosa. Contingência continua
+            # disponível para repasses incrementais após esta distribuição.
+            self.alocar_energia(destino, quantidade, politica="pulso")
 
     def alocar_energia(
         self,
