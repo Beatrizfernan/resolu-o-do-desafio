@@ -12,6 +12,8 @@ Guia tecnico da implementacao atual da Central de Armazenagem.
 | `POST` | `/armazenagem/descartar-carga` | Enfileira o descarte de uma carga que esteja na mao. |
 | `POST` | `/armazenagem/solicitar-transporte` | Enfileira a publicacao de `carga_disponivel` para recolocar a carga no fluxo externo. |
 
+
+
 ## Semantica de execucao
 
 - `GET /armazenagem/armazens` responde imediatamente com o estado atual.
